@@ -120,6 +120,192 @@ export type PolicyRow = {
   enabled: boolean;
 };
 
+export type Region = {
+  id: string;
+  name: string;
+  status: "ok" | "warn" | "bad";
+  nodes: string;
+  az: number;
+  cost_per_hour: string;
+  traffic_pct: number;
+};
+
+export type ServiceRow = {
+  id: string;
+  name: string;
+  stack: string;
+  region: string;
+  status: "ok" | "warn" | "bad";
+  replicas: string;
+  cpu_pct: number;
+  mem_pct: number;
+  rps: number;
+  error_pct: number;
+  p95_ms: number;
+  version: string;
+  reason?: string;
+};
+
+export type IncidentRow = {
+  id: string;
+  severity: "low" | "med" | "high";
+  title: string;
+  service_id: string;
+  age: string;
+  assignee: string;
+  status: "investigating" | "monitoring" | "resolved";
+};
+
+export type DeployRow = {
+  id: string;
+  version: string;
+  service: string;
+  who: string;
+  when: string;
+  status: "ok" | "warn" | "bad";
+  rollback_candidate: boolean;
+};
+
+export type SLORow = {
+  id: string;
+  name: string;
+  target: string;
+  actual: string;
+  burn_rate: string;
+  state: "ok" | "warn" | "bad";
+};
+
+export type PublicSignal = {
+  id: string;
+  name: string;
+  state: "ok" | "warn" | "bad";
+  uptime: string;
+  last_incident: string;
+  uptime90: number[];
+};
+
+export type PrivateSignal = {
+  id: string;
+  name: string;
+  state: "ok" | "warn" | "bad";
+  note: string;
+};
+
+export type StatusIncident = {
+  id: string;
+  title: string;
+  state: "investigating" | "monitoring" | "resolved";
+  started_at: string;
+  updates: number;
+  public: boolean;
+};
+
+export type AgentRow = {
+  id: string;
+  version: string;
+  channel: "stable" | "canary" | "shadow";
+  status: "active" | "paused" | "drained";
+  model: string;
+  owner: string;
+  trust: number;
+  runs_24h: number;
+  cost_24h: number;
+  p95_s: number;
+  tools: string[];
+  rate_per_min: number;
+  budget: number;
+  signed: boolean;
+  drift: number;
+  spark: number[];
+};
+
+export type AgentDeploy = {
+  id: string;
+  agent: string;
+  from: string;
+  to: string;
+  channel: "stable" | "canary" | "shadow";
+  who: string;
+  when: string;
+  status: "rolled-out" | "rolling" | "rolled-back";
+  eval_delta: string;
+  cost_delta: string;
+};
+
+export type SigningKey = {
+  fingerprint: string;
+  agent: string;
+  algo: "ed25519" | "rsa-4096";
+  sigs_24h: number;
+  last_used: string;
+};
+
+export type EvalSuiteRow = {
+  id: string;
+  cases: number;
+  pass_rate: number;
+  delta: number;
+  last: string;
+  baseline: number;
+  model: string;
+  flake_rate: number;
+  status: "ok" | "warn" | "bad";
+  trend: number[];
+};
+
+export type EvalRegression = {
+  id: string;
+  suite: string;
+  case: string;
+  model: string;
+  first_fail: string;
+  occurrences: number;
+  owner: string;
+  commit: string;
+};
+
+export type EvalAB = {
+  name: string;
+  a: { label: string; wins: number; score: number };
+  b: { label: string; wins: number; score: number };
+  trials: string;
+  significance: string;
+};
+
+export type TeamBudget = {
+  id: string;
+  label: string;
+  spend_24h: number;
+  cap: number;
+  mtd: number;
+  cap_mtd: number;
+  agents: number;
+  runs: number;
+  trend: string;
+  spark: number[];
+  status: "ok" | "warn" | "bad";
+};
+
+export type BudgetBreach = {
+  id: string;
+  team: string;
+  cap: string;
+  amount: string;
+  when: string;
+  action: string;
+  resolved: boolean;
+};
+
+export type TopRun = {
+  id: string;
+  goal: string;
+  agent: string;
+  cost_usd: number;
+  duration: string;
+  when: string;
+  status: "ok" | "warn" | "bad" | "aborted";
+};
+
 export type Seed = {
   nowPlaying: {
     id: string;
@@ -152,6 +338,51 @@ export type Seed = {
     queue: ApprovalRow[];
     recent: RecentVerdict[];
     policies: PolicyRow[];
+  };
+  infra: {
+    kpi: { uptime: string; mttr: string; openIncidents: number; slosBreached: number };
+    regions: Region[];
+    services: ServiceRow[];
+    /** Per-service 60-min CPU% load (0..1 normalized). Length 60. */
+    load: Array<{ id: string; values: number[] }>;
+    incidents: IncidentRow[];
+    deploys: DeployRow[];
+    slos: SLORow[];
+  };
+  statusPage: {
+    url: string;
+    published: boolean;
+    publicSignals: PublicSignal[];
+    privateSignals: PrivateSignal[];
+    incidents: StatusIncident[];
+  };
+  agents: {
+    kpi: { active: number; paused: number; total: number; avg_trust: number; deploys_24h: number };
+    list: AgentRow[];
+    deploys: AgentDeploy[];
+    keys: SigningKey[];
+  };
+  evals: {
+    kpi: { suites: number; total_cases: number; passing: string; regressions: number; drift: string };
+    suites: EvalSuiteRow[];
+    regressions: EvalRegression[];
+    ab: EvalAB;
+  };
+  budgets: {
+    kpi: {
+      spend_24h: number;
+      cap_day: number;
+      spend_mtd: number;
+      cap_month: number;
+      forecast: number;
+      breaches_30d: number;
+    };
+    teams: TeamBudget[];
+    breaches: BudgetBreach[];
+    top_runs: TopRun[];
+    /** 31 daily values to current day for the MTD chart. */
+    mtd_daily: number[];
+    cap_line: number;
   };
 };
 
@@ -461,4 +692,175 @@ export const seed: Seed = {
       { id: "p_pkg",    name: "package-install",    surface: "pnpm/npm/yarn add",                       mode: "ask-once",      enabled: false },
     ],
   },
+
+  infra: {
+    kpi: { uptime: "99.987%", mttr: "6m41s", openIncidents: 1, slosBreached: 1 },
+    regions: [
+      { id: "us-east-1",      name: "US East (N. Virginia)", status: "ok",   nodes: "48/48", az: 3, cost_per_hour: "$1.84/h", traffic_pct: 0.62 },
+      { id: "us-west-2",      name: "US West (Oregon)",       status: "ok",   nodes: "32/32", az: 3, cost_per_hour: "$1.21/h", traffic_pct: 0.18 },
+      { id: "eu-west-1",      name: "EU (Ireland)",            status: "warn", nodes: "23/24", az: 3, cost_per_hour: "$1.02/h", traffic_pct: 0.14 },
+      { id: "ap-southeast-1", name: "AP (Singapore)",          status: "ok",   nodes: "16/16", az: 2, cost_per_hour: "$0.62/h", traffic_pct: 0.06 },
+    ],
+    services: [
+      { id: "svc_edge",   name: "edge-gateway",     stack: "edge",      region: "global",       status: "ok",   replicas: "24/24", cpu_pct: 0.31, mem_pct: 0.42, rps: 8420, error_pct: 0.001, p95_ms: 42,  version: "1.42.0" },
+      { id: "svc_api",    name: "api-public",       stack: "go",        region: "us-east-1",    status: "ok",   replicas: "16/16", cpu_pct: 0.48, mem_pct: 0.51, rps: 4210, error_pct: 0.002, p95_ms: 88,  version: "4.07.1" },
+      { id: "svc_apipri", name: "api-private",      stack: "go",        region: "us-east-1",    status: "ok",   replicas: "12/12", cpu_pct: 0.39, mem_pct: 0.44, rps: 2104, error_pct: 0.001, p95_ms: 71,  version: "4.07.1" },
+      { id: "svc_auth",   name: "auth-service",     stack: "rust",      region: "us-east-1",    status: "ok",   replicas: "12/12", cpu_pct: 0.42, mem_pct: 0.38, rps: 1842, error_pct: 0.000, p95_ms: 32,  version: "2.18.4" },
+      { id: "svc_embed",  name: "embedding-worker", stack: "python",    region: "us-east-1",    status: "warn", replicas: "8/10",  cpu_pct: 0.81, mem_pct: 0.74, rps: 142,  error_pct: 0.024, p95_ms: 4218, version: "0.94.2", reason: "queue depth 8.4k · 2 workers OOM-restarted in last 5m" },
+      { id: "svc_ledger", name: "billing-ledger",   stack: "node",      region: "us-east-1",    status: "ok",   replicas: "6/6",   cpu_pct: 0.22, mem_pct: 0.31, rps: 412,  error_pct: 0.001, p95_ms: 64,  version: "1.12.0" },
+      { id: "svc_search", name: "search-public",    stack: "go",        region: "us-east-1",    status: "ok",   replicas: "8/8",   cpu_pct: 0.34, mem_pct: 0.41, rps: 3018, error_pct: 0.002, p95_ms: 91,  version: "3.08.2" },
+      { id: "svc_oss",    name: "opensearch",       stack: "java",      region: "us-east-1",    status: "ok",   replicas: "9/9",   cpu_pct: 0.51, mem_pct: 0.62, rps: 1842, error_pct: 0.000, p95_ms: 18,  version: "2.13.0" },
+      { id: "svc_kafka",  name: "kafka-events",     stack: "scala",     region: "us-east-1",    status: "ok",   replicas: "6/6",   cpu_pct: 0.44, mem_pct: 0.58, rps: 14012,error_pct: 0.000, p95_ms: 8,   version: "3.7.0" },
+      { id: "svc_runner", name: "agent-runner",     stack: "node",      region: "us-east-1",    status: "ok",   replicas: "20/20", cpu_pct: 0.62, mem_pct: 0.57, rps: 412,  error_pct: 0.000, p95_ms: 142, version: "0.42.0" },
+      { id: "svc_eu",     name: "api-public-eu",    stack: "go",        region: "eu-west-1",    status: "warn", replicas: "11/12", cpu_pct: 0.71, mem_pct: 0.62, rps: 1208, error_pct: 0.014, p95_ms: 211, version: "4.07.1", reason: "1 pod CrashLoopBackOff · CPU throttling on shared node" },
+      { id: "svc_ap",     name: "api-public-ap",    stack: "go",        region: "ap-southeast-1", status: "ok", replicas: "6/6",   cpu_pct: 0.28, mem_pct: 0.34, rps: 421,  error_pct: 0.000, p95_ms: 64,  version: "4.07.1" },
+    ],
+    load: [
+      { id: "svc_edge",   values: minuteSeries(60, 0.30, 0.06) },
+      { id: "svc_api",    values: minuteSeries(60, 0.48, 0.08) },
+      { id: "svc_auth",   values: minuteSeries(60, 0.42, 0.07) },
+      { id: "svc_embed",  values: minuteSeries(60, 0.78, 0.16, 0.95) },
+      { id: "svc_search", values: minuteSeries(60, 0.34, 0.06) },
+      { id: "svc_runner", values: minuteSeries(60, 0.60, 0.10) },
+    ],
+    incidents: [
+      { id: "inc_71", severity: "high", title: "embedding-worker queue depth backing up", service_id: "svc_embed", age: "14 min", assignee: "on-call: kai",   status: "investigating" },
+      { id: "inc_70", severity: "med",  title: "EU public API CPU throttling on shared node", service_id: "svc_eu", age: "42 min", assignee: "on-call: kai", status: "monitoring" },
+    ],
+    deploys: [
+      { id: "dep_4421", version: "4.07.1", service: "api-public",       who: "mara",  when: "18 min ago", status: "ok",   rollback_candidate: false },
+      { id: "dep_4420", version: "0.94.2", service: "embedding-worker", who: "devon", when: "32 min ago", status: "warn", rollback_candidate: true  },
+      { id: "dep_4419", version: "2.18.4", service: "auth-service",     who: "mara",  when: "1 h ago",    status: "ok",   rollback_candidate: false },
+      { id: "dep_4418", version: "0.42.0", service: "agent-runner",     who: "devon", when: "2 h ago",    status: "ok",   rollback_candidate: false },
+    ],
+    slos: [
+      { id: "slo_api_avail",  name: "api-public · availability",   target: "99.95%", actual: "99.99%", burn_rate: "0.04", state: "ok"   },
+      { id: "slo_api_p95",    name: "api-public · p95 latency",     target: "<150ms", actual: "88ms",   burn_rate: "0.61", state: "ok"   },
+      { id: "slo_embed_p95",  name: "embedding-worker · p95",        target: "<2s",    actual: "4.2s",   burn_rate: "9.42", state: "bad"  },
+      { id: "slo_auth_avail", name: "auth-service · availability",  target: "99.99%", actual: "100.00%", burn_rate: "0.00", state: "ok"  },
+      { id: "slo_search_p95", name: "search-public · p95",           target: "<200ms", actual: "91ms",   burn_rate: "0.46", state: "ok"   },
+      { id: "slo_eu_avail",   name: "api-public-eu · availability", target: "99.95%", actual: "99.74%", burn_rate: "1.84", state: "warn" },
+    ],
+  },
+
+  statusPage: {
+    url: "status.anthropic-ops.com",
+    published: true,
+    publicSignals: [
+      { id: "p_api",    name: "API ingestion",      state: "ok",   uptime: "99.998%", last_incident: "7 days ago",  uptime90: uptimeStrip(90, 0.998) },
+      { id: "p_search", name: "Search public",      state: "ok",   uptime: "99.992%", last_incident: "14 days ago", uptime90: uptimeStrip(90, 0.995) },
+      { id: "p_auth",   name: "Authentication",     state: "ok",   uptime: "99.999%", last_incident: "31 days ago", uptime90: uptimeStrip(90, 0.999) },
+      { id: "p_dash",   name: "Dashboard",          state: "ok",   uptime: "99.971%", last_incident: "9 days ago",  uptime90: uptimeStrip(90, 0.99) },
+      { id: "p_recv",   name: "Receipts search",    state: "warn", uptime: "99.842%", last_incident: "active",       uptime90: uptimeStrip(90, 0.98, 4) },
+    ],
+    privateSignals: [
+      { id: "i_kafka",   name: "Kafka — events",            state: "warn", note: "lag 1.2s on partition 4" },
+      { id: "i_oss",     name: "OpenSearch — receipts",     state: "ok",   note: "shard rebalance complete · 09:18Z" },
+      { id: "i_runner",  name: "Agent runner — schedulers", state: "ok",   note: "all 20 replicas healthy" },
+      { id: "i_vault",   name: "Vault — secrets",            state: "ok",   note: "leases renewed · 09:32Z" },
+    ],
+    incidents: [
+      { id: "inc_42", title: "Receipt search degraded",                 state: "monitoring",   started_at: "09:18 UTC", updates: 3, public: true  },
+      { id: "inc_41", title: "Brief auth latency spike on us-east-1",   state: "resolved",     started_at: "Yesterday", updates: 5, public: true  },
+      { id: "inc_40", title: "OpenSearch shard rebalance — internal",   state: "resolved",     started_at: "Yesterday", updates: 2, public: false },
+    ],
+  },
+
+  agents: {
+    kpi: { active: 4, paused: 1, total: 6, avg_trust: 0.94, deploys_24h: 3 },
+    list: [
+      { id: "claude-code",  version: "0.42",   channel: "stable", status: "active", model: "sonnet-4.5",   owner: "platform", trust: 0.97, runs_24h: 412, cost_24h: 104.18, p95_s: 4.2, tools: ["read_file","edit_file","bash","grep","web_fetch"], rate_per_min: 120, budget: 200.00, signed: true,  drift: 0,    spark: [5,6,5,7,6,8,7,9,8,7,9,10,9,11,10,12,11,12] },
+      { id: "eval-runner",  version: "1.18",   channel: "stable", status: "active", model: "sonnet-4.5",   owner: "evals",    trust: 0.94, runs_24h: 142, cost_24h: 38.42,  p95_s: 7.8, tools: ["read_file","bash"],                              rate_per_min: 24,  budget: 80.00,  signed: true,  drift: 0.01, spark: [3,3,4,4,5,5,4,5,5,6,6,5,6,5,6,7,7,7] },
+      { id: "auto-triage",  version: "0.4",    channel: "canary", status: "active", model: "haiku-4.5",    owner: "ops",      trust: 0.91, runs_24h: 248, cost_24h: 21.94,  p95_s: 1.4, tools: ["read_file","grep"],                              rate_per_min: 60,  budget: 60.00,  signed: true,  drift: 0,    spark: [2,2,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6,6] },
+      { id: "doc-summarize",version: "0.7-rc", channel: "shadow", status: "active", model: "haiku-4.5",    owner: "docs",     trust: 0.89, runs_24h: 88,  cost_24h: 6.21,   p95_s: 2.0, tools: ["read_file"],                                     rate_per_min: 18,  budget: 30.00,  signed: false, drift: 0.04, spark: [1,1,2,2,2,2,3,3,3,3,3,4,4,4,4,4,5,5] },
+      { id: "release-bot",  version: "2.01",   channel: "stable", status: "paused", model: "sonnet-4.5",   owner: "platform", trust: 0.96, runs_24h: 0,   cost_24h: 0.00,   p95_s: 0,   tools: ["read_file","edit_file","bash"],                  rate_per_min: 0,   budget: 50.00,  signed: true,  drift: 0,    spark: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] },
+      { id: "test-runner",  version: "0.18",   channel: "stable", status: "active", model: "haiku-4.5",    owner: "platform", trust: 0.93, runs_24h: 312, cost_24h: 13.52,  p95_s: 0.8, tools: ["bash"],                                          rate_per_min: 90,  budget: 30.00,  signed: true,  drift: 0,    spark: [4,4,5,5,5,5,5,6,6,6,6,7,7,7,7,7,8,8] },
+    ],
+    deploys: [
+      { id: "dep_4421", agent: "claude-code", from: "0.41",   to: "0.42",   channel: "stable", who: "devon@ops", when: "4 h ago",    status: "rolled-out",  eval_delta: "+0.4%",  cost_delta: "-3.1%" },
+      { id: "dep_4420", agent: "auto-triage", from: "0.3",    to: "0.4",    channel: "canary", who: "mara@ops",  when: "8 h ago",    status: "rolled-out",  eval_delta: "+1.2%",  cost_delta: "-12.4%" },
+      { id: "dep_4419", agent: "test-runner", from: "0.17",   to: "0.18",   channel: "stable", who: "devon@ops", when: "1 d ago",    status: "rolled-out",  eval_delta: "0.0%",   cost_delta: "+0.0%" },
+    ],
+    keys: [
+      { fingerprint: "b8:c4:1e:7a:91:ff:24:0d:…", agent: "claude-code", algo: "ed25519", sigs_24h: 412, last_used: "12s ago" },
+      { fingerprint: "f2:18:0b:33:c1:42:9e:01:…", agent: "eval-runner", algo: "ed25519", sigs_24h: 142, last_used: "2 min ago" },
+      { fingerprint: "a4:e9:71:5c:08:bd:33:ff:…", agent: "auto-triage", algo: "ed25519", sigs_24h: 248, last_used: "44s ago" },
+    ],
+  },
+
+  evals: {
+    kpi: { suites: 14, total_cases: 2842, passing: "97.4%", regressions: 2, drift: "-0.6%" },
+    suites: [
+      { id: "auth-suite",     cases: 184, pass_rate: 0.952, delta: -0.011, last: "12 min ago", baseline: 0.963, model: "sonnet-4.5", flake_rate: 0.012, status: "warn", trend: [97,97,96,97,97,96,97,96,96,95,96,95,95,95] },
+      { id: "billing-suite",  cases: 142, pass_rate: 0.978, delta:  0.000, last: "21 min ago", baseline: 0.978, model: "sonnet-4.5", flake_rate: 0.008, status: "ok",   trend: [98,98,98,98,98,98,98,98,98,98,98,98,98,98] },
+      { id: "search-suite",   cases: 312, pass_rate: 0.988, delta:  0.002, last: "31 min ago", baseline: 0.986, model: "sonnet-4.5", flake_rate: 0.004, status: "ok",   trend: [98,99,98,99,98,99,99,98,99,99,99,99,99,99] },
+      { id: "tool-use-suite", cases: 488, pass_rate: 0.961, delta: -0.004, last: "44 min ago", baseline: 0.965, model: "sonnet-4.5", flake_rate: 0.018, status: "ok",   trend: [96,96,96,96,96,97,96,96,96,96,96,96,96,96] },
+      { id: "infra-suite",    cases: 218, pass_rate: 0.991, delta:  0.000, last: "1 h ago",    baseline: 0.991, model: "sonnet-4.5", flake_rate: 0.005, status: "ok",   trend: [99,99,99,99,99,99,99,99,99,99,99,99,99,99] },
+      { id: "long-tail-suite",cases: 412, pass_rate: 0.917, delta: -0.022, last: "2 h ago",    baseline: 0.939, model: "sonnet-4.5", flake_rate: 0.041, status: "bad",  trend: [94,94,93,94,93,94,93,93,92,92,91,92,92,91] },
+      { id: "policy-suite",   cases: 144, pass_rate: 0.999, delta:  0.000, last: "3 h ago",    baseline: 0.999, model: "sonnet-4.5", flake_rate: 0.001, status: "ok",   trend: [99,99,99,99,99,99,99,99,99,99,99,99,99,99] },
+      { id: "trust-suite",    cases: 188, pass_rate: 0.972, delta: -0.001, last: "4 h ago",    baseline: 0.973, model: "sonnet-4.5", flake_rate: 0.011, status: "ok",   trend: [97,97,97,97,97,97,97,97,97,97,97,97,97,97] },
+    ],
+    regressions: [
+      { id: "r_412", suite: "auth-suite",       case: "rotates session id mid-request",   model: "sonnet-4.5", first_fail: "12 min ago", occurrences: 2, owner: "platform", commit: "b8c41e7" },
+      { id: "r_411", suite: "long-tail-suite",  case: "handles 16k-token tool output",     model: "sonnet-4.5", first_fail: "2 h ago",     occurrences: 4, owner: "platform", commit: "a14ee02" },
+    ],
+    ab: {
+      name: "sonnet-4.5 vs sonnet-5-rc",
+      a: { label: "sonnet-4.5", wins: 412, score: 97.4 },
+      b: { label: "sonnet-5-rc", wins: 438, score: 98.6 },
+      trials: "12,840 trials",
+      significance: "p < 0.001",
+    },
+  },
+
+  budgets: {
+    kpi: { spend_24h: 184.27, cap_day: 240.00, spend_mtd: 3284.10, cap_month: 6000.00, forecast: 5872.00, breaches_30d: 1 },
+    teams: [
+      { id: "platform", label: "platform", spend_24h: 104.18, cap: 120.00, mtd: 1842.31, cap_mtd: 2400.00, agents: 2, runs: 412, trend: "+13%", spark: [80,82,86,90,94,98,102,104], status: "warn" },
+      { id: "ops",      label: "ops",      spend_24h: 21.94,  cap: 60.00,  mtd: 612.04,  cap_mtd: 1200.00, agents: 1, runs: 248, trend: "-4%",  spark: [22,24,23,22,21,22,22,22],     status: "ok"   },
+      { id: "evals",    label: "evals",    spend_24h: 38.42,  cap: 80.00,  mtd: 612.18,  cap_mtd: 1600.00, agents: 1, runs: 142, trend: "+2%",  spark: [38,38,39,40,40,38,38,38],     status: "ok"   },
+      { id: "docs",     label: "docs",     spend_24h: 6.21,   cap: 30.00,  mtd: 88.18,   cap_mtd: 600.00,  agents: 1, runs: 88,  trend: "0%",   spark: [6,6,6,6,7,6,6,6],              status: "ok"   },
+      { id: "billing",  label: "billing",  spend_24h: 13.52,  cap: 30.00,  mtd: 129.39,  cap_mtd: 600.00,  agents: 1, runs: 312, trend: "+1%",  spark: [13,13,14,14,13,13,13,14],     status: "ok"   },
+    ],
+    breaches: [
+      { id: "br_701", team: "platform", cap: "$200 / day", amount: "$214.02", when: "May 6", action: "paused agents · 18m", resolved: true },
+    ],
+    top_runs: [
+      { id: "sess_91c4", goal: "Backfill embeddings for support corpus",    agent: "eval-runner",  cost_usd: 6.74, duration: "41m08s", when: "31 min ago",  status: "aborted" },
+      { id: "sess_8c1a", goal: "Refactor auth middleware (session rotation)", agent: "claude-code", cost_usd: 0.83, duration: "—",      when: "live",         status: "ok"      },
+      { id: "sess_4f22", goal: "Backfill embeddings for support corpus",    agent: "claude-code", cost_usd: 1.94, duration: "—",      when: "live",         status: "ok"      },
+      { id: "sess_b14c", goal: "Reconcile Stripe webhook ledger drift",      agent: "claude-code", cost_usd: 2.41, duration: "—",      when: "live",         status: "warn"    },
+      { id: "sess_3a01", goal: "Patch CVE-2026-1144 in image-resizer",       agent: "claude-code", cost_usd: 1.42, duration: "18m02s", when: "12 min ago",   status: "ok"      },
+    ],
+    mtd_daily: [80,82,85,88,86,90,92,95,98,102,108,112,118,124,131,138,146,154,162,170,178,186,184],
+    cap_line: 200,
+  },
 };
+
+/** Deterministic-ish minute series, clamped to [0,1]. */
+function minuteSeries(n: number, base: number, jitter: number, peak?: number): number[] {
+  const out: number[] = [];
+  let v = base;
+  for (let i = 0; i < n; i++) {
+    const wave = Math.sin((i / n) * Math.PI * 2) * jitter * 0.5;
+    const noise = (Math.sin(i * 7.13) + Math.sin(i * 3.7)) * jitter * 0.25;
+    v = Math.max(0, Math.min(1, base + wave + noise));
+    if (peak && i === Math.floor(n * 0.85)) v = peak;
+    out.push(Number(v.toFixed(3)));
+  }
+  return out;
+}
+
+/** 0..N day uptime ratio strip with `incidentDays` random down-days under base. */
+function uptimeStrip(n: number, base: number, incidentDays = 1): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(base + (Math.sin(i * 1.7) + Math.sin(i * 0.3)) * 0.0006);
+  }
+  for (let k = 0; k < incidentDays; k++) {
+    const idx = (n - 1 - k * 7) % n;
+    if (idx >= 0 && idx < n) out[idx] = Math.max(0.5, base - 0.04 - k * 0.01);
+  }
+  return out.map((v) => Number(Math.max(0, Math.min(1, v)).toFixed(4)));
+}
+
