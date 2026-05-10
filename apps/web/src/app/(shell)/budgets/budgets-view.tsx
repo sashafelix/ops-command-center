@@ -136,7 +136,7 @@ export function BudgetsView() {
             </thead>
             <tbody>
               {d.top_runs.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-white/[0.02]">
+                <tr key={r.id} className="border-t hover:bg-[var(--hover-soft)]">
                   <td className="px-3 py-2">
                     <StatusDot tone={r.status === "aborted" ? "bad" : (r.status as "ok" | "warn" | "bad")} label={r.id} />
                   </td>

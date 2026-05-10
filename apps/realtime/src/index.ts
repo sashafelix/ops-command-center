@@ -68,8 +68,8 @@ wss.on("connection", (ws: WebSocket) => {
     const msg = result.data;
     switch (msg.type) {
       case "subscribe": {
-        hub.subscribe(msg.topic, sub);
-        ws.send(JSON.stringify({ type: "ack", topic: msg.topic, cursor: sub.cursorByTopic.get(msg.topic) ?? "" }));
+        const { status, cursor } = hub.subscribe(msg.topic, sub, msg.cursor);
+        ws.send(JSON.stringify({ type: "ack", topic: msg.topic, cursor, status }));
         return;
       }
       case "unsubscribe": {

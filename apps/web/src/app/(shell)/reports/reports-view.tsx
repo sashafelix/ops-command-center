@@ -59,7 +59,7 @@ export function ReportsView() {
             </thead>
             <tbody>
               {d.scheduled.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-white/[0.02]">
+                <tr key={r.id} className="border-t hover:bg-[var(--hover-soft)]">
                   <td className="px-3 py-2 text-fg flex items-center gap-2">
                     <FileText size={12} className="text-fg-faint" aria-hidden />
                     {r.name}

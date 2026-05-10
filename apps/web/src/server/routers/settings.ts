@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, adminProcedure, router } from "../trpc";
 import { mockStore } from "../mock/store";
 import { appendAuditEvent } from "../audit-append";
 import { requireFreshAuth } from "../reauth";
@@ -7,8 +7,8 @@ import { requireFreshAuth } from "../reauth";
 export const settingsRouter = router({
   overview: protectedProcedure.query(() => mockStore.settings),
 
-  /** Toggle a webhook on/off. Destructive — re-auth gate + audit. */
-  toggleWebhook: protectedProcedure
+  /** Admin-only — destructive workspace config touches secrets. */
+  toggleWebhook: adminProcedure
     .input(z.object({ id: z.string(), enabled: z.boolean() }))
     .mutation(({ input, ctx }) => {
       requireFreshAuth(ctx);

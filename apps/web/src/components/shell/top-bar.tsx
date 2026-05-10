@@ -36,7 +36,7 @@ export function TopBar({ initials }: { initials: string }) {
             type="button"
             title="Notifications"
             aria-label="Notifications"
-            className="relative w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-white/5 rounded"
+            className="relative w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded"
           >
             <Bell size={16} aria-hidden />
             {/* Phase 1: dot wired in Phase 4 when notifications router lands */}
@@ -46,7 +46,7 @@ export function TopBar({ initials }: { initials: string }) {
             type="button"
             title="Help (?)"
             aria-label="Help"
-            className="w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-white/5 rounded"
+            className="w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded"
           >
             <HelpCircle size={16} aria-hidden />
           </button>
@@ -57,7 +57,7 @@ export function TopBar({ initials }: { initials: string }) {
 
           <button
             type="button"
-            className="flex items-center gap-2 h-8 pl-1 pr-2 hover:bg-white/5 rounded"
+            className="flex items-center gap-2 h-8 pl-1 pr-2 hover:bg-[var(--hover)] rounded"
             aria-label="Account"
           >
             <span className="w-7 h-7 rounded-full bg-ink-4 border flex items-center justify-center text-11 font-mono text-fg">

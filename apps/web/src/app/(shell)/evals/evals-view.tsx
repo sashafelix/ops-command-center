@@ -81,7 +81,7 @@ export function EvalsView() {
               </thead>
               <tbody>
                 {d.suites.map((s) => (
-                  <tr key={s.id} className="border-t hover:bg-white/[0.02]">
+                  <tr key={s.id} className="border-t hover:bg-[var(--hover-soft)]">
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <StatusDot tone={s.status} label={s.id} />

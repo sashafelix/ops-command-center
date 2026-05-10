@@ -12,6 +12,7 @@ import { trustRouter } from "./trust";
 import { auditLogRouter } from "./audit-log";
 import { reportsRouter } from "./reports";
 import { settingsRouter } from "./settings";
+import { runtimeRouter } from "./runtime";
 
 export const appRouter = router({
   auth: authRouter,
@@ -27,6 +28,7 @@ export const appRouter = router({
   auditLog: auditLogRouter,
   reports: reportsRouter,
   settings: settingsRouter,
+  runtime: runtimeRouter,
 });
 
 export type AppRouter = typeof appRouter;

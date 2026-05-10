@@ -76,7 +76,7 @@ export function AgentsRegistry() {
             </thead>
             <tbody>
               {d.list.map((a) => (
-                <tr key={a.id} className="border-t hover:bg-white/[0.02]">
+                <tr key={a.id} className="border-t hover:bg-[var(--hover-soft)]">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <StatusDot tone={a.status === "active" ? "ok" : a.status === "paused" ? "warn" : "info"} label={a.id} />

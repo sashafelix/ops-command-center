@@ -164,7 +164,7 @@ export function AuditLogView() {
                       height: ROW_HEIGHT,
                     }}
                     className={cn(
-                      "flex items-center px-3 border-t hover:bg-white/[0.02] text-12",
+                      "flex items-center px-3 border-t hover:bg-[var(--hover-soft)] text-12",
                       anchorIdx && "bg-bad/10",
                     )}
                   >
@@ -233,6 +233,8 @@ function ChainChip({
       disabled={loading || state.status === "running"}
       className={cn(
         "h-8 px-3 panel2 hover:border-line2 text-12 flex items-center gap-1.5",
+        // Reserve room for the longest variant so the chip never shifts neighbors.
+        "min-w-[14rem] justify-start",
         state.status === "ok" && "border-ok/40 text-ok",
         state.status === "bad" && "border-bad/40 text-bad",
         state.status === "idle" && "text-fg-muted hover:text-fg",

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { mockStore } from "../mock/store";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
@@ -12,11 +12,10 @@ export const approvalsRouter = router({
   inbox: protectedProcedure.query(() => mockStore.approvals),
 
   /**
-   * Optimistic mutation entry point. Phase 2 simply removes the row from the
-   * queue and prepends a verdict. Phase 4 writes a real audit event and a
-   * re-auth gate per HANDOFF §4.
+   * SRE-or-higher only. Phase 4 writes a chain-correct audit row;
+   * Phase 5 adds RBAC + propagates the decision over WS.
    */
-  decide: protectedProcedure
+  decide: sreProcedure
     .input(
       z.object({
         id: z.string(),
