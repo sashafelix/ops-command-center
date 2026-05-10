@@ -3,11 +3,14 @@
 import type { ReactNode } from "react";
 import { TrpcProvider } from "@/lib/trpc/provider";
 import { CommandPaletteProvider } from "@/components/cmdk/command-palette";
+import { ReauthGate } from "@/components/reauth/reauth-gate";
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <TrpcProvider>
-      <CommandPaletteProvider>{children}</CommandPaletteProvider>
+      <ReauthGate>
+        <CommandPaletteProvider>{children}</CommandPaletteProvider>
+      </ReauthGate>
     </TrpcProvider>
   );
 }

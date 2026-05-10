@@ -8,12 +8,14 @@ import { KpiCard } from "@/components/kpi-card";
 import { StatusDot } from "@/components/status-dot";
 import { useCountdown, fmtCountdown } from "@/components/approvals/countdown";
 import { removeApprovalById } from "@/components/approvals/optimistic";
+import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { cn } from "@/lib/utils";
 
 type Decision = "approve" | "deny" | "edit" | "snooze";
 
 export function ApprovalsQueue() {
   const utils = trpc.useUtils();
+  const { requireFreshAuth } = useReauthGate();
   const inbox = trpc.approvals.inbox.useQuery(undefined, { staleTime: 5_000 });
 
   const decide = trpc.approvals.decide.useMutation({
@@ -33,8 +35,12 @@ export function ApprovalsQueue() {
   });
 
   const onDecide = useCallback(
-    (id: string, decision: Decision) => decide.mutate({ id, decision }),
-    [decide],
+    async (id: string, decision: Decision) => {
+      const ok = await requireFreshAuth(`Confirm to ${decision} approval ${id}.`);
+      if (!ok) return;
+      decide.mutate({ id, decision });
+    },
+    [decide, requireFreshAuth],
   );
 
   // Top-row keyboard shortcuts: A/D/E/S for the topmost pending card
@@ -54,7 +60,7 @@ export function ApprovalsQueue() {
       const decision = map[k];
       if (!decision) return;
       e.preventDefault();
-      onDecide(top.id, decision);
+      void onDecide(top.id, decision);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -146,7 +152,7 @@ function ApprovalCard({
   };
   isTop: boolean;
   pending: boolean;
-  onDecide: (id: string, decision: Decision) => void;
+  onDecide: (id: string, decision: Decision) => void | Promise<void>;
 }) {
   const remaining = useCountdown(row.auto_deny_at);
   const sevTone = row.severity === "high" ? "bad" : row.severity === "med" ? "warn" : "info";
