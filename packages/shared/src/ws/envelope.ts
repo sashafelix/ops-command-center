@@ -29,7 +29,13 @@ export const WsServerMessage = z.discriminatedUnion("type", [
     ts: z.string(),
     payload: z.unknown(),
   }),
-  z.object({ type: z.literal("ack"), topic: WsTopic, cursor: z.string() }),
+  z.object({
+    type: z.literal("ack"),
+    topic: WsTopic,
+    cursor: z.string(),
+    /** Replay outcome: "ok" caught up, "fresh" first connect, "gap" cursor too old → client should refetch via tRPC. */
+    status: z.enum(["ok", "fresh", "gap"]).optional(),
+  }),
   z.object({ type: z.literal("error"), code: z.string(), message: z.string() }),
   z.object({ type: z.literal("pong") }),
 ]);
