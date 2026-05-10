@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { mockStore } from "../mock/store";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
@@ -8,8 +8,8 @@ import { appendAuditEvent } from "../audit-append";
 export const agentsRouter = router({
   overview: protectedProcedure.query(() => mockStore.agents),
 
-  /** Destructive — re-auth + audit-event write. */
-  rollback: protectedProcedure
+  /** Destructive — SRE+, re-auth, audit-event. */
+  rollback: sreProcedure
     .input(z.object({ deploy_id: z.string() }))
     .mutation(({ input, ctx }) => {
       requireFreshAuth(ctx);

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../trpc";
+import { protectedProcedure, analystProcedure, router } from "../trpc";
 import { mockStore } from "../mock/store";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
@@ -11,9 +11,9 @@ export const evalsRouter = router({
 
   /**
    * Returns a fake job id; clients show a toast and poll runStatus.
-   * Destructive (consumes budget) — re-auth + audit-event write.
+   * Consumes budget — analyst+, re-auth, audit-event.
    */
-  runSuite: protectedProcedure
+  runSuite: analystProcedure
     .input(z.object({ suite_id: z.string() }))
     .mutation(({ input, ctx }) => {
       requireFreshAuth(ctx);
