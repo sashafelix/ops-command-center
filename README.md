@@ -29,27 +29,39 @@ ops-command-center/
 pnpm install
 
 # Configure env (one-time)
-cp .env.example .env.local                # for apps/web
+cp .env.example apps/web/.env.local       # for apps/web
 cp .env.example apps/realtime/.env        # for apps/realtime
+# Minimum to boot:
+#   AUTH_SECRET, REALTIME_JWT_SECRET, DATABASE_URL
+# Optional (production sign-in): AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET
 
-# Edit both files. Minimum to boot:
-#   AUTH_SECRET, AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, REALTIME_JWT_SECRET
+# Bring up Postgres (containerized via compose.yaml)
+docker compose up -d postgres
 
+# Apply migrations + load the demo dataset (idempotent)
+pnpm -F @ops/web db:migrate
+pnpm -F @ops/web db:seed
+
+# Start the apps with hot reload
 pnpm dev   # runs apps/web (3000) and apps/realtime (4001) concurrently
 ```
 
 Open http://localhost:3000 — you'll be bounced to `/login`. Sign in with Google,
-then the dashboard lands on `/live`.
+or in development pick a role under "Continue without OIDC".
 
 ## Scripts
 
 | Command           | What it does                                      |
 | ----------------- | ------------------------------------------------- |
-| `pnpm dev`        | Run all workspace `dev` scripts in parallel       |
-| `pnpm build`      | Build every workspace package                     |
-| `pnpm typecheck`  | `tsc --noEmit` across the workspace               |
-| `pnpm lint`       | ESLint across the workspace                       |
-| `pnpm test`       | Vitest across the workspace                       |
+| `pnpm dev`                   | Run all workspace `dev` scripts in parallel  |
+| `pnpm build`                 | Build every workspace package                |
+| `pnpm typecheck`             | `tsc --noEmit` across the workspace          |
+| `pnpm lint`                  | ESLint across the workspace                  |
+| `pnpm test`                  | Vitest across the workspace                  |
+| `pnpm -F @ops/web db:generate` | Diff schema → emit a new SQL migration     |
+| `pnpm -F @ops/web db:migrate`  | Apply pending migrations against `DATABASE_URL` |
+| `pnpm -F @ops/web db:seed`     | Truncate + reload the demo dataset (idempotent) |
+| `pnpm -F @ops/web db:studio`   | Open Drizzle Studio against the dev database |
 
 ## Design language
 

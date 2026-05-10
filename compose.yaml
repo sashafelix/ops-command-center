@@ -1,0 +1,35 @@
+# =============================================================================
+# Ops Command Center — local dev compose
+# =============================================================================
+# This file currently brings up Postgres only — apps/web and apps/realtime are
+# expected to run via `pnpm dev` so you keep hot reload during development.
+# Phase 9 will add `web` and `realtime` services here for production.
+#
+# Quickstart:
+#   docker compose up -d postgres
+#   pnpm db:migrate
+#   pnpm db:seed
+#   pnpm dev
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ops}
+      POSTGRES_DB: ${POSTGRES_DB:-ops}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ops-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ops} -d ${POSTGRES_DB:-ops}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  ops-postgres-data:
+    name: ops-postgres-data
