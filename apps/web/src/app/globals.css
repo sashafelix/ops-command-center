@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import "../styles/tokens.css";
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--hairline);
+  }
+
+  html,
+  body {
+    background: rgb(var(--ink-0));
+    color: rgb(var(--fg));
+    font-family: var(--font-geist-sans), Geist, Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* 24px grid background — 2% opacity per HANDOFF §3 */
+  body {
+    background-image:
+      linear-gradient(var(--bg-img-a) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-img-a) 1px, transparent 1px);
+    background-size: 24px 24px, 24px 24px;
+    background-position: 0 0, 0 0;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--hairline2);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--hairline3);
+  }
+
+  .num,
+  .mono {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .panel {
+    background: rgb(var(--ink-1));
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+  }
+  .panel2 {
+    background: rgb(var(--ink-2));
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    background: var(--kbd-bg);
+    border: 1px solid var(--kbd-bd);
+    border-radius: 4px;
+    color: rgb(var(--kbd-fg));
+    font-family: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .skel {
+    position: relative;
+    overflow: hidden;
+    background: var(--skel-bg);
+  }
+  .skel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--skel-shim), transparent);
+    animation: shimmer 1.6s linear infinite;
+    background-size: 600px 100%;
+  }
+
+  /* Empty-state ASCII art (per mock) */
+  .ascii {
+    font-family: var(--font-geist-mono), "Geist Mono", monospace;
+    color: rgb(var(--fg) / 0.2);
+    white-space: pre;
+    line-height: 1;
+  }
+
+  /* Status dot — paired with a label per a11y rule */
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .dot-ok   { background: rgb(var(--ok)); }
+  .dot-warn { background: rgb(var(--warn)); }
+  .dot-bad  { background: rgb(var(--bad)); }
+  .dot-info { background: rgb(var(--info)); }
+  .dot-violet { background: rgb(var(--violet)); }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid var(--hairline2);
+    border-radius: 999px;
+    background: rgb(var(--ink-2));
+    color: rgb(var(--fg-muted));
+    font-size: 11px;
+    line-height: 1;
+  }
+  .chip.ok   { color: rgb(var(--ok));   border-color: rgb(var(--ok)   / 0.38); background: rgb(var(--ok)   / 0.08); }
+  .chip.warn { color: rgb(var(--warn)); border-color: rgb(var(--warn) / 0.38); background: rgb(var(--warn) / 0.08); }
+  .chip.bad  { color: rgb(var(--bad));  border-color: rgb(var(--bad)  / 0.38); background: rgb(var(--bad)  / 0.08); }
+  .chip.info { color: rgb(var(--info)); border-color: rgb(var(--info) / 0.38); background: rgb(var(--info) / 0.08); }
+}
