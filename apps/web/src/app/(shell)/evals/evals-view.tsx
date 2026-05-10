@@ -6,12 +6,14 @@ import { trpc } from "@/lib/trpc/client";
 import { KpiCard } from "@/components/kpi-card";
 import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
+import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { cn } from "@/lib/utils";
 
 type Toast = { id: string; suite: string; runId: string };
 
 export function EvalsView() {
   const q = trpc.evals.overview.useQuery();
+  const { requireFreshAuth } = useReauthGate();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const run = trpc.evals.runSuite.useMutation({
     onSuccess: (r) => {
@@ -20,6 +22,12 @@ export function EvalsView() {
       setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
     },
   });
+
+  async function handleRun(suiteId: string) {
+    const ok = await requireFreshAuth(`Confirm run of suite ${suiteId}.`);
+    if (!ok) return;
+    run.mutate({ suite_id: suiteId });
+  }
 
   if (q.isLoading || !q.data) {
     return (
@@ -96,7 +104,7 @@ export function EvalsView() {
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
-                        onClick={() => run.mutate({ suite_id: s.id })}
+                        onClick={() => void handleRun(s.id)}
                         disabled={run.isPending}
                         className="h-7 px-2 panel2 text-11 text-fg-muted hover:text-fg flex items-center gap-1"
                       >

@@ -4,15 +4,23 @@ import { trpc } from "@/lib/trpc/client";
 import { KpiCard } from "@/components/kpi-card";
 import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
+import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { fmtUSD, cn } from "@/lib/utils";
 import { RotateCcw, Key } from "lucide-react";
 
 export function AgentsRegistry() {
   const utils = trpc.useUtils();
+  const { requireFreshAuth } = useReauthGate();
   const q = trpc.agents.overview.useQuery();
   const rollback = trpc.agents.rollback.useMutation({
     onSuccess: () => void utils.agents.overview.invalidate(),
   });
+
+  async function handleRollback(deployId: string, agent: string, fromV: string, toV: string) {
+    const ok = await requireFreshAuth(`Confirm rollback of ${agent}: ${toV} → ${fromV}.`);
+    if (!ok) return;
+    rollback.mutate({ deploy_id: deployId });
+  }
 
   if (q.isLoading || !q.data) {
     return (
@@ -126,7 +134,7 @@ export function AgentsRegistry() {
                 )}>{dep.cost_delta}</span>
                 <button
                   type="button"
-                  onClick={() => rollback.mutate({ deploy_id: dep.id })}
+                  onClick={() => void handleRollback(dep.id, dep.agent, dep.from, dep.to)}
                   disabled={dep.status === "rolled-back" || rollback.isPending}
                   className="h-7 px-2 panel2 text-11 text-fg-muted hover:text-fg flex items-center gap-1 disabled:opacity-40"
                 >
