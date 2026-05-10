@@ -5,6 +5,8 @@
  * to a real backend.
  */
 
+import { createHash } from "node:crypto";
+
 const HOUR_MS = 60 * 60 * 1000;
 const MIN_MS = 60 * 1000;
 const SEC_MS = 1000;
@@ -306,6 +308,107 @@ export type TopRun = {
   status: "ok" | "warn" | "bad" | "aborted";
 };
 
+export type ThreatRow = {
+  category: string;
+  /** 24 buckets, value 0..1 normalized to 5-level heat. */
+  values: number[];
+  total: number;
+};
+
+export type InvestigationRow = {
+  id: string;
+  severity: "low" | "med" | "high";
+  title: string;
+  session_id: string;
+  age: string;
+  evidence_status: "pending" | "verified" | "tampered";
+  status: "open" | "triage" | "closed";
+};
+
+export type EvidenceStreamRow = {
+  id: string;
+  session_id: string;
+  kind: string;
+  hash: string;
+  signed: boolean;
+  signed_by?: string;
+  at: string;
+};
+
+export type ScheduledReport = {
+  id: string;
+  name: string;
+  cadence: string;
+  next_run: string;
+  recipients: string[];
+  format: "PDF" | "CSV" | "JSONL";
+  last_run: string;
+};
+
+export type AdHocReport = {
+  id: string;
+  name: string;
+  by: string;
+  when: string;
+  size: string;
+};
+
+export type ComplianceBundle = {
+  id: "soc2" | "iso27001" | "eu-ai-act";
+  name: string;
+  framework: string;
+  /** Sticks per HANDOFF: deterministic-build status. */
+  status: "ready" | "stale" | "building";
+  last_built: string;
+  range: string;
+  /** Identity of the byte-deterministic content; same range → same hash. */
+  content_hash: string;
+};
+
+export type ConnectionField = {
+  k: string;
+  label: string;
+  type: "url" | "secret" | "string" | "bool";
+  value: string;
+};
+
+export type Connection = {
+  id: string;
+  name: string;
+  category: string;
+  status: "connected" | "needs-attention" | "disconnected";
+  detail: string;
+  fields: ConnectionField[];
+  last_sync: string;
+  health: "ok" | "warn" | "bad";
+};
+
+export type MemberRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: "Owner" | "Admin" | "SRE" | "Analyst" | "Viewer";
+  mfa: boolean;
+  last_seen: string;
+};
+
+export type TokenRow = {
+  id: string;
+  name: string;
+  scope: string;
+  created_at: string;
+  last_used: string;
+  expires_at: string;
+};
+
+export type WebhookRow = {
+  id: string;
+  url: string;
+  events: string[];
+  status: "ok" | "warn" | "bad";
+  delivery_stats: string;
+};
+
 export type Seed = {
   nowPlaying: {
     id: string;
@@ -384,6 +487,45 @@ export type Seed = {
     mtd_daily: number[];
     cap_line: number;
   };
+  trust: {
+    kpi: {
+      active_threats: number;
+      open_investigations: number;
+      signed_pct: string;
+      policy_violations_24h: number;
+    };
+    threats: ThreatRow[];
+    investigations: InvestigationRow[];
+    evidence: EvidenceStreamRow[];
+  };
+  reports: {
+    kpi: { scheduled: number; delivered_30d: number; ad_hoc: number; bundles: number };
+    scheduled: ScheduledReport[];
+    ad_hoc: AdHocReport[];
+    bundles: ComplianceBundle[];
+  };
+  settings: {
+    general: { workspace_name: string; org_id: string; created_at: string; tier: string };
+    connections: Connection[];
+    members: MemberRow[];
+    tokens: TokenRow[];
+    webhooks: WebhookRow[];
+    prefs: {
+      retention: string;
+      timezone: string;
+      density: "compact" | "comfortable";
+      auto_refresh: boolean;
+      ambient_audio: boolean;
+      theme: "system" | "dark" | "light";
+      language: string;
+      experimental: boolean;
+    };
+    about: { version: string; build_id: string; commit: string; built_at: string };
+  };
+  /** 1200+ chained audit events. Genesis prev_hash = "" per HANDOFF §5. */
+  auditEvents: import("@ops/shared").AuditRow[];
+  /** Re-auth marker — last fresh-auth timestamp per user (mock). */
+  reauth: Record<string, string>;
 };
 
 export const seed: Seed = {
@@ -835,7 +977,140 @@ export const seed: Seed = {
     mtd_daily: [80,82,85,88,86,90,92,95,98,102,108,112,118,124,131,138,146,154,162,170,178,186,184],
     cap_line: 200,
   },
+
+  trust: {
+    kpi: {
+      active_threats: 0,
+      open_investigations: 2,
+      signed_pct: "99.6%",
+      policy_violations_24h: 3,
+    },
+    threats: [
+      { category: "Prompt injection",      values: heatRow(24, 1, 4),  total: 1 },
+      { category: "Data exfiltration",     values: heatRow(24, 2, 3),  total: 0 },
+      { category: "Policy violation",      values: heatRow(24, 3, 7),  total: 3 },
+      { category: "Tool misuse",            values: heatRow(24, 1, 11), total: 1 },
+      { category: "Supply chain",           values: heatRow(24, 0, 0),  total: 0 },
+      { category: "Identity drift",         values: heatRow(24, 0, 0),  total: 0 },
+      { category: "Output anomaly",         values: heatRow(24, 2, 2),  total: 2 },
+    ],
+    investigations: [
+      { id: "inv_204", severity: "med",  title: "Instruction-in-output candidate", session_id: "sess_b14c", age: "7 min",  evidence_status: "verified", status: "open"   },
+      { id: "inv_203", severity: "low",  title: "Anomalous tool-use pattern",       session_id: "sess_71b2", age: "58 min", evidence_status: "verified", status: "triage" },
+    ],
+    evidence: [
+      { id: "evt_99201", session_id: "sess_8c1a", kind: "prompt",     hash: "b8…c41", signed: true,  signed_by: "claude-code/0.42", at: "09:38:06Z" },
+      { id: "evt_99200", session_id: "sess_8c1a", kind: "edit_file",  hash: "f2…980", signed: true,  signed_by: "claude-code/0.42", at: "09:39:12Z" },
+      { id: "evt_99199", session_id: "sess_b14c", kind: "tool_output",hash: "a4…71d", signed: false,                                  at: "09:40:03Z" },
+      { id: "evt_99198", session_id: "sess_4f22", kind: "web_fetch",  hash: "01…442", signed: true,  signed_by: "claude-code/0.42", at: "09:41:22Z" },
+      { id: "evt_99197", session_id: "sess_8c1a", kind: "bash",       hash: "ee…2c1", signed: true,  signed_by: "claude-code/0.42", at: "09:42:08Z" },
+    ],
+  },
+
+  reports: {
+    kpi: { scheduled: 5, delivered_30d: 18, ad_hoc: 12, bundles: 3 },
+    scheduled: [
+      { id: "rep_w_trust",   name: "Weekly trust + safety",       cadence: "Mondays 09:00", next_run: "Mon May 11 09:00", recipients: ["mara@ops", "devon@ops", "#sec-ops"], format: "PDF",   last_run: "May 4" },
+      { id: "rep_w_cost",    name: "Weekly cost + budgets",        cadence: "Mondays 09:00", next_run: "Mon May 11 09:00", recipients: ["mara@ops", "fin-ops@anthropic"],     format: "PDF",   last_run: "May 4" },
+      { id: "rep_d_evals",   name: "Daily evals digest",            cadence: "Daily 18:00",   next_run: "Today 18:00",      recipients: ["#evals"],                              format: "CSV",   last_run: "Yesterday" },
+      { id: "rep_m_compl",   name: "Monthly compliance summary",   cadence: "1st 06:00",     next_run: "Jun 1 06:00",      recipients: ["legal@anthropic"],                     format: "PDF",   last_run: "May 1" },
+      { id: "rep_w_audit",   name: "Weekly audit export",           cadence: "Sundays 23:55", next_run: "Sun May 17 23:55", recipients: ["audit-archive@anthropic"],            format: "JSONL", last_run: "May 4" },
+    ],
+    ad_hoc: [
+      { id: "adh_201", name: "Cost spike May 6 — incident-attached",         by: "devon@ops", when: "2 days ago", size: "1.4 MB" },
+      { id: "adh_200", name: "Auth latency post-mortem evidence bundle",     by: "mara@ops",  when: "5 days ago", size: "3.8 MB" },
+      { id: "adh_199", name: "Q1 trust+safety review (signed)",                by: "mara@ops",  when: "21 days ago", size: "12.1 MB" },
+    ],
+    bundles: [
+      { id: "soc2",        name: "SOC 2 evidence bundle",   framework: "SOC 2 Type II", status: "ready",   last_built: "12 min ago", range: "Apr 11 — May 10", content_hash: "soc2:b8c41e7a91" },
+      { id: "iso27001",    name: "ISO 27001 evidence",       framework: "ISO/IEC 27001", status: "ready",   last_built: "4 h ago",    range: "Apr 11 — May 10", content_hash: "iso:f2180b33c1" },
+      { id: "eu-ai-act",   name: "EU AI Act technical file", framework: "EU AI Act",     status: "stale",   last_built: "8 d ago",    range: "Apr 1 — May 1",   content_hash: "euai:a4e9715c08" },
+    ],
+  },
+
+  settings: {
+    general: {
+      workspace_name: "Anthropic Ops",
+      org_id: "org_8c1a4f22a771",
+      created_at: "2024-09-12",
+      tier: "Enterprise",
+    },
+    connections: [
+      { id: "anthropic", name: "Anthropic API",   category: "Model providers",  status: "connected",       detail: "sk-ant-…6c4f · 3 keys",     fields: [
+        { k: "base_url", label: "Base URL", type: "url",    value: "https://api.anthropic.com/v1" },
+        { k: "api_key",  label: "API key",  type: "secret", value: "sk-ant-api03-************************6c4f" },
+      ], last_sync: "12s ago", health: "ok" },
+      { id: "openai",    name: "OpenAI API",      category: "Model providers",  status: "connected",       detail: "sk-…2e0a · 1 key",         fields: [
+        { k: "api_key", label: "API key", type: "secret", value: "sk-proj-************************2e0a" },
+      ], last_sync: "2 min ago", health: "ok" },
+      { id: "github",    name: "GitHub",           category: "Repos",            status: "connected",       detail: "github.com/anthropic-ops · 24 repos", fields: [
+        { k: "host",  label: "Host",          type: "url",    value: "https://github.com" },
+        { k: "token", label: "Personal token", type: "secret", value: "ghp_*****************************4Zk" },
+      ], last_sync: "44s ago", health: "ok" },
+      { id: "slack",     name: "Slack",            category: "Notifications",    status: "connected",       detail: "T0…98 · #sec-ops · #ops",   fields: [
+        { k: "bot_token", label: "Bot token", type: "secret", value: "xoxb-************************************Z2" },
+      ], last_sync: "1 min ago", health: "ok" },
+      { id: "pagerduty", name: "PagerDuty",        category: "Notifications",    status: "needs-attention", detail: "key rotates in 4 days",      fields: [
+        { k: "service_key", label: "Service key", type: "secret", value: "pd-************************************84" },
+      ], last_sync: "4 h ago", health: "warn" },
+      { id: "vault",     name: "HashiCorp Vault",  category: "Secrets",          status: "connected",       detail: "vault.internal · token TTL 24h", fields: [
+        { k: "addr",  label: "Address",  type: "url",    value: "https://vault.internal" },
+        { k: "token", label: "Token",    type: "secret", value: "hvs.************************************AB" },
+      ], last_sync: "8 min ago", health: "ok" },
+      { id: "datadog",   name: "Datadog",          category: "Observability",    status: "connected",       detail: "us3.datadoghq.com · 18 monitors", fields: [
+        { k: "api_key", label: "API key", type: "secret", value: "dd-************************************7c" },
+      ], last_sync: "21s ago", health: "ok" },
+      { id: "opensearch", name: "OpenSearch",      category: "Data",             status: "connected",       detail: "events-* + receipts-*",      fields: [
+        { k: "host", label: "Host", type: "url", value: "https://oss.internal:9200" },
+      ], last_sync: "live",     health: "ok" },
+      { id: "stripe",    name: "Stripe",            category: "Billing",          status: "connected",       detail: "acct_1Q…4j · live",          fields: [
+        { k: "api_key", label: "API key", type: "secret", value: "rk_live_************************************84" },
+      ], last_sync: "1 h ago",  health: "ok" },
+      { id: "n8n",       name: "n8n automations",  category: "Automations",      status: "disconnected",    detail: "—",                           fields: [], last_sync: "—",        health: "warn" },
+    ],
+    members: [
+      { id: "u_mara",  name: "Mara Olin",   email: "mara@ops",   role: "Owner",   mfa: true,  last_seen: "now"        },
+      { id: "u_devon", name: "Devon Park",  email: "devon@ops",  role: "Admin",   mfa: true,  last_seen: "12s ago"    },
+      { id: "u_iris",  name: "Iris Cao",    email: "iris@ops",   role: "SRE",     mfa: true,  last_seen: "4 min ago"  },
+      { id: "u_kai",   name: "Kai Park",    email: "kai@ops",    role: "SRE",     mfa: true,  last_seen: "1 h ago"    },
+      { id: "u_lin",   name: "Lin Patel",   email: "lin@ops",    role: "Analyst", mfa: false, last_seen: "Yesterday"  },
+    ],
+    tokens: [
+      { id: "tok_ci",     name: "ci-deploy",       scope: "approvals.write, sessions.read",  created_at: "Mar 02", last_used: "14s ago", expires_at: "Aug 02" },
+      { id: "tok_archive",name: "audit-archive",   scope: "audit.read",                       created_at: "Apr 18", last_used: "8 h ago",  expires_at: "Oct 18" },
+      { id: "tok_eval",   name: "eval-bot",        scope: "evals.run, sessions.read",         created_at: "Jan 11", last_used: "31 min ago", expires_at: "Jul 11" },
+    ],
+    webhooks: [
+      { id: "wh_slack",  url: "https://hooks.slack.com/…/B07K…",        events: ["session.failed", "approval.denied"],          status: "ok",   delivery_stats: "18,321 · 99.97%" },
+      { id: "wh_pd",     url: "https://events.pagerduty.com/v2/enqueue", events: ["incident.opened"],                             status: "ok",   delivery_stats: "412 · 100.0%" },
+      { id: "wh_audit",  url: "https://audit-archive.internal/ingest",   events: ["audit.row"],                                    status: "warn", delivery_stats: "1.4M · 99.71%" },
+    ],
+    prefs: {
+      retention: "90 days",
+      timezone: "UTC",
+      density: "compact",
+      auto_refresh: true,
+      ambient_audio: false,
+      theme: "system",
+      language: "en-US",
+      experimental: false,
+    },
+    about: {
+      version: "1.0.0",
+      build_id: "ops-1.0.0+phase4",
+      commit: "phase-4/security-workspace",
+      built_at: new Date().toISOString(),
+    },
+  },
+
+  /** Synthesized at module init below — placeholder so the type checks. */
+  auditEvents: [],
+  /** Re-auth tracker — keyed by user email. Mock-only. */
+  reauth: {},
 };
+
+// Build the 1200-row hash chain after the seed is constructed (sync init).
+seed.auditEvents = buildSeedAuditChain(1200);
 
 /** Deterministic-ish minute series, clamped to [0,1]. */
 function minuteSeries(n: number, base: number, jitter: number, peak?: number): number[] {
@@ -862,5 +1137,80 @@ function uptimeStrip(n: number, base: number, incidentDays = 1): number[] {
     if (idx >= 0 && idx < n) out[idx] = Math.max(0.5, base - 0.04 - k * 0.01);
   }
   return out.map((v) => Number(Math.max(0, Math.min(1, v)).toFixed(4)));
+}
+
+/** Heat row: 24 buckets, mostly zeros with `n` random non-zero spikes peaking at `peak`. */
+function heatRow(n: number, peak: number, _seed: number): number[] {
+  const out = new Array<number>(n).fill(0);
+  // Deterministic placement based on _seed
+  const positions = [3, 8, 15, 19, 22];
+  let placed = 0;
+  for (let i = 0; placed < peak && i < positions.length; i++) {
+    const p = (positions[i]! + _seed) % n;
+    out[p] = 0.4 + (placed % 2) * 0.4;
+    placed += 1;
+  }
+  return out;
+}
+
+/**
+ * Builds a deterministic, hash-chained sequence of N audit events. Sync-only —
+ * uses node:crypto SHA-256, but produces output bit-identical to what
+ * `computeAuditHash` (which uses Web Crypto) yields, since both hash the same
+ * canonicalJson(body) bytes.
+ */
+function buildSeedAuditChain(n: number): import("@ops/shared").AuditRow[] {
+  const out: import("@ops/shared").AuditRow[] = [];
+  const actors = ["mara@ops", "devon@ops", "iris@ops", "kai@ops", "claude-code", "release-bot"];
+  const roles = ["admin", "sre", "agent"];
+  const actions = [
+    "approval.decide", "agent.rollback", "evals.run", "session.start", "session.end",
+    "policy.update", "token.rotate", "member.invite", "deploy.execute", "incident.ack",
+  ];
+  const targets = [
+    "approval/apr_8821", "deploy/dep_4421", "agent/claude-code", "session/sess_8c1a",
+    "policy/p_destr", "token/tok_ci", "member/u_lin", "incident/inc_71",
+  ];
+  const baseTs = Date.now() - 25 * 60 * 60 * 1000;
+
+  let prevHash = "";
+  for (let i = 0; i < n; i++) {
+    const tsMs = baseTs + Math.floor((i / n) * 25 * 60 * 60 * 1000);
+    const body = {
+      id: `evt_${(100000 + i).toString(36)}`,
+      ts: new Date(tsMs).toISOString(),
+      actor: actors[i % actors.length]!,
+      role: roles[i % roles.length]!,
+      action: actions[i % actions.length]!,
+      target: targets[i % targets.length]!,
+      ip: `10.0.${(i / 256) | 0}.${i % 256}`,
+      ua: i % 2 === 0 ? "ops-web/1.0 (chrome)" : "ops-cli/0.42",
+    };
+    const canonical = canonicalJsonSync(body);
+    const hash = createHash("sha256").update(prevHash + canonical).digest("hex");
+    out.push({
+      ...body,
+      prev_hash: prevHash,
+      hash,
+      ...(i % 60 === 0 ? { anchored_at: new Date(tsMs).toISOString() } : {}),
+    });
+    prevHash = hash;
+  }
+  return out;
+}
+
+/** Sync mirror of packages/shared canonicalJson — kept here to avoid circular import + async init. */
+function canonicalJsonSync(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "number") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJsonSync).join(",")}]`;
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJsonSync(obj[k])}`).join(",")}}`;
+  }
+  throw new Error(`canonicalJsonSync: unsupported type ${typeof value}`);
 }
 

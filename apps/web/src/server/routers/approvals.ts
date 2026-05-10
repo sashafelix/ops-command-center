@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../trpc";
 import { mockStore } from "../mock/store";
+import { requireFreshAuth } from "../reauth";
+import { appendAuditEvent } from "../audit-append";
 
 const Decision = z.enum(["approve", "deny", "edit", "snooze"]);
 
@@ -23,6 +25,7 @@ export const approvalsRouter = router({
       }),
     )
     .mutation(({ input, ctx }) => {
+      requireFreshAuth(ctx);
       const idx = mockStore.approvals.queue.findIndex((a) => a.id === input.id);
       if (idx < 0) throw new TRPCError({ code: "NOT_FOUND" });
       const [row] = mockStore.approvals.queue.splice(idx, 1);
@@ -45,9 +48,14 @@ export const approvalsRouter = router({
       });
       mockStore.approvals.recent = mockStore.approvals.recent.slice(0, 8);
       mockStore.approvals.counts.pending = Math.max(0, mockStore.approvals.counts.pending - 1);
-
-      // Reflect the badge count
       mockStore.navBadges.approvals = Math.max(0, (mockStore.navBadges.approvals ?? 0) - 1);
+
+      appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: `approval.${input.decision}`,
+        target: `approval/${row.id}`,
+      });
 
       return { id: row.id, decision: input.decision };
     }),
