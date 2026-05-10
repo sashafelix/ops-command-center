@@ -1,13 +1,7 @@
-import { Placeholder } from "@/components/placeholder";
+import { EvalsView } from "./evals-view";
 
 export const metadata = { title: "Evals · Ops Command Center" };
 
 export default function EvalsPage() {
-  return (
-    <Placeholder
-      title="Evals"
-      blurb="Suites, A/B comparisons, regressions — Phase 3."
-      empty="Evals ship in Phase 3."
-    />
-  );
+  return <EvalsView />;
 }
