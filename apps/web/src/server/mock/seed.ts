@@ -380,7 +380,7 @@ export type Connection = {
   detail: string;
   fields: ConnectionField[];
   last_sync: string;
-  health: "ok" | "warn" | "bad";
+  health: "ok" | "warn" | "bad" | "info" | "violet";
 };
 
 export type MemberRow = {
@@ -405,7 +405,7 @@ export type WebhookRow = {
   id: string;
   url: string;
   events: string[];
-  status: "ok" | "warn" | "bad";
+  status: "ok" | "warn" | "bad" | "info" | "violet";
   delivery_stats: string;
 };
 
