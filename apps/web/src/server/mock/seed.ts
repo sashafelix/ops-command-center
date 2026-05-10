@@ -526,6 +526,12 @@ export type Seed = {
   auditEvents: import("@ops/shared").AuditRow[];
   /** Re-auth marker — last fresh-auth timestamp per user (mock). */
   reauth: Record<string, string>;
+  /** Workspace-wide runtime state — kill switch. */
+  runtime: {
+    paused: boolean;
+    paused_at?: string | undefined;
+    paused_by?: string | undefined;
+  };
 };
 
 export const seed: Seed = {
@@ -1107,6 +1113,12 @@ export const seed: Seed = {
   auditEvents: [],
   /** Re-auth tracker — keyed by user email. Mock-only. */
   reauth: {},
+  /** Workspace runtime state — Phase 5. */
+  runtime: {
+    paused: false,
+    paused_at: undefined,
+    paused_by: undefined,
+  },
 };
 
 // Build the 1200-row hash chain after the seed is constructed (sync init).

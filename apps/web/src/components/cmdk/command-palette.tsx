@@ -14,6 +14,7 @@ import {
 } from "react";
 import { ALL_DESTINATIONS } from "@/components/shell/nav-config";
 import { readRecents, pushRecent, type Recent } from "./recents-store";
+import { usePaletteActions, type PaletteAction } from "./actions";
 import { toggleTheme } from "@/lib/theme";
 
 type Ctx = { open: () => void; close: () => void; isOpen: boolean };
@@ -88,17 +89,21 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
         />
       </Suspense>
       <KeyboardShortcuts isOpen={isOpen} open={open} close={close} pathname={pathname} />
-      {isOpen && (
-        <PaletteOverlay
-          query={query}
-          onQueryChange={onQueryChange}
-          onSelect={navigate}
-          onClose={close}
-          recents={recents}
-        />
-      )}
+      {isOpen && <PaletteShim query={query} onQueryChange={onQueryChange} onSelect={navigate} onClose={close} recents={recents} />}
     </CmdKCtx.Provider>
   );
+}
+
+/** Hooks-using shim that calls usePaletteActions; only mounted while the palette is open. */
+function PaletteShim(props: {
+  query: string;
+  onQueryChange: (q: string) => void;
+  onSelect: (item: { id: string; label: string; href: string }) => void;
+  onClose: () => void;
+  recents: Recent[];
+}) {
+  const actions = usePaletteActions();
+  return <PaletteOverlay {...props} actions={actions} />;
 }
 
 /**
@@ -135,12 +140,14 @@ function PaletteOverlay({
   onSelect,
   onClose,
   recents,
+  actions,
 }: {
   query: string;
   onQueryChange: (q: string) => void;
   onSelect: (item: { id: string; label: string; href: string }) => void;
   onClose: () => void;
   recents: Recent[];
+  actions: PaletteAction[];
 }) {
   return (
     <div
@@ -193,6 +200,19 @@ function PaletteOverlay({
               ))}
             </Command.Group>
 
+            <Command.Group heading="Action">
+              {actions.map((a) => (
+                <Item
+                  key={`action-${a.id}`}
+                  label={a.destructive ? `${a.label} ⚠` : a.label}
+                  onSelect={() => {
+                    onClose();
+                    void a.run();
+                  }}
+                />
+              ))}
+            </Command.Group>
+
             <Command.Group heading="View">
               <Item
                 label="Toggle theme"
@@ -222,7 +242,7 @@ function Item({
   return (
     <Command.Item
       onSelect={onSelect}
-      className="flex items-center gap-2 px-4 py-2 text-12 text-fg-muted aria-selected:bg-white/[0.06] aria-selected:text-fg cursor-pointer"
+      className="flex items-center gap-2 px-4 py-2 text-12 text-fg-muted aria-selected:bg-[var(--hover)] aria-selected:text-fg cursor-pointer"
     >
       <span className="flex-1">{label}</span>
       {shortcut && <span className="kbd">{shortcut}</span>}

@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { TopBar } from "./top-bar";
 import { Sidebar } from "./sidebar";
 import { NowPlaying } from "./now-playing";
+import { RuntimeBanner } from "./runtime-banner";
 import { suppressNowPlaying } from "./nav-config";
 
 export function ChromeShell({
@@ -20,6 +21,7 @@ export function ChromeShell({
   return (
     <div className="min-w-[1280px]">
       <TopBar initials={initials} />
+      <RuntimeBanner />
       <div className="flex">
         <Sidebar />
         <div className="flex-1 min-w-0 flex flex-col">
