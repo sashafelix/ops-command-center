@@ -1,13 +1,7 @@
-import { Placeholder } from "@/components/placeholder";
+import { StatusPageView } from "./status-page-view";
 
 export const metadata = { title: "Status page · Ops Command Center" };
 
 export default function StatusPage() {
-  return (
-    <Placeholder
-      title="Status page"
-      blurb="Public + private signals, 90-day uptime, incident timeline — Phase 3."
-      empty="Status page ships in Phase 3."
-    />
-  );
+  return <StatusPageView />;
 }
