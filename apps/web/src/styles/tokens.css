@@ -1,0 +1,124 @@
+/**
+ * Design tokens lifted verbatim from Reference_Folder/Ops Dashboard.html.
+ * RGB triplets are used so Tailwind's `<alpha-value>` modifier works.
+ */
+
+:root,
+.theme-dark {
+  --ink-0: 8 9 11;
+  --ink-1: 12 14 18;
+  --ink-2: 16 19 26;
+  --ink-3: 22 26 35;
+  --ink-4: 29 34 48;
+  --ink-5: 38 44 58;
+
+  --line: 255 255 255;
+  --line2: 255 255 255;
+  --line3: 255 255 255;
+
+  --fg: 231 233 238;
+  --fg-muted: 138 144 156;
+  --fg-dim: 90 96 108;
+  --fg-faint: 58 63 74;
+
+  --ok: 63 183 122;
+  --warn: 212 154 42;
+  --bad: 229 86 74;
+  --info: 91 141 239;
+  --violet: 156 124 244;
+
+  --bg: 8 9 11;
+  --hairline-a: 0.06;
+  --hairline2-a: 0.1;
+  --hairline3-a: 0.16;
+  --grid-a: 0.022;
+  --hover-a: 0.04;
+  --hover-soft-a: 0.025;
+  --kbd-bg-a: 0.03;
+  --kbd-bd-a: 0.1;
+  --kbd-fg: 184 189 199;
+  --skel-a: 0.04;
+  --skel-shim-a: 0.06;
+  --tab-ink: 231 233 238;
+  --cmdk-back: 4 5 7 / 0.72;
+  --ticked-a: 0.14;
+  --rule-a: 0.1;
+
+  --hairline: rgb(255 255 255 / 0.06);
+  --hairline2: rgb(255 255 255 / 0.1);
+  --hairline3: rgb(255 255 255 / 0.16);
+  --hover: rgb(255 255 255 / 0.04);
+  --hover-soft: rgb(255 255 255 / 0.025);
+  --kbd-bg: rgb(255 255 255 / 0.03);
+  --kbd-bd: rgb(255 255 255 / 0.1);
+  --skel-bg: rgb(255 255 255 / 0.04);
+  --skel-shim: rgb(255 255 255 / 0.06);
+  --grid-line: rgb(255 255 255 / 0.022);
+  --rule-color: rgb(255 255 255 / 0.1);
+  --ticked-line: rgb(255 255 255 / 0.14);
+
+  --heat-0: rgb(255 255 255 / 0.03);
+  --heat-1: rgb(91 141 239 / 0.18);
+  --heat-2: rgb(212 154 42 / 0.22);
+  --heat-3: rgb(229 86 74 / 0.28);
+  --heat-4: rgb(229 86 74 / 0.55);
+
+  --bg-img-a: rgba(255, 255, 255, 0.022);
+  --spark-info: #5b8def;
+  --spark-ok: #3fb77a;
+  --spark-warn: #d49a2a;
+  --spark-bad: #e5564a;
+  --spark-violet: #9c7cf4;
+}
+
+.theme-light {
+  --ink-0: 246 246 243;
+  --ink-1: 255 255 255;
+  --ink-2: 250 250 247;
+  --ink-3: 244 244 240;
+  --ink-4: 232 232 226;
+  --ink-5: 220 220 213;
+
+  --line: 10 12 18;
+  --line2: 10 12 18;
+  --line3: 10 12 18;
+
+  --fg: 21 23 28;
+  --fg-muted: 82 88 102;
+  --fg-dim: 122 128 144;
+  --fg-faint: 176 181 190;
+
+  --ok: 35 132 79;
+  --warn: 168 113 16;
+  --bad: 198 56 44;
+  --info: 47 108 219;
+  --violet: 115 82 209;
+
+  --kbd-fg: 72 78 92;
+
+  --hairline: rgb(10 12 18 / 0.1);
+  --hairline2: rgb(10 12 18 / 0.16);
+  --hairline3: rgb(10 12 18 / 0.24);
+  --hover: rgb(10 12 18 / 0.05);
+  --hover-soft: rgb(10 12 18 / 0.03);
+  --kbd-bg: rgb(10 12 18 / 0.03);
+  --kbd-bd: rgb(10 12 18 / 0.14);
+  --skel-bg: rgb(10 12 18 / 0.05);
+  --skel-shim: rgb(10 12 18 / 0.07);
+  --grid-line: rgb(10 12 18 / 0.04);
+  --rule-color: rgb(10 12 18 / 0.16);
+  --ticked-line: rgb(10 12 18 / 0.2);
+
+  --heat-0: rgb(10 12 18 / 0.04);
+  --heat-1: rgb(47 108 219 / 0.18);
+  --heat-2: rgb(168 113 16 / 0.22);
+  --heat-3: rgb(198 56 44 / 0.26);
+  --heat-4: rgb(198 56 44 / 0.5);
+
+  --bg-img-a: rgba(10, 12, 18, 0.04);
+  --spark-info: #2f6cdb;
+  --spark-ok: #23844f;
+  --spark-warn: #a87110;
+  --spark-bad: #c6382c;
+  --spark-violet: #7352d1;
+}
