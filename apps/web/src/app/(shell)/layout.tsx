@@ -5,10 +5,21 @@ import { ChromeShell } from "@/components/shell/chrome-shell";
 // Auth-gated chrome — never statically prerender.
 export const dynamic = "force-dynamic";
 
-export default async function ShellLayout({ children }: { children: ReactNode }) {
+export default async function ShellLayout({
+  children,
+  overlay,
+}: {
+  children: ReactNode;
+  overlay: ReactNode;
+}) {
   const session = await auth();
   const initials = pickInitials(session?.user?.name ?? session?.user?.email ?? "?");
-  return <ChromeShell initials={initials}>{children}</ChromeShell>;
+  return (
+    <ChromeShell initials={initials}>
+      {children}
+      {overlay}
+    </ChromeShell>
+  );
 }
 
 function pickInitials(s: string): string {
