@@ -27,7 +27,7 @@ export function MembersSection({ items }: { items: MemberRow[] }) {
           </thead>
           <tbody>
             {items.map((m) => (
-              <tr key={m.id} className="border-t hover:bg-white/[0.02]">
+              <tr key={m.id} className="border-t hover:bg-[var(--hover-soft)]">
                 <td className="px-3 py-2">
                   <span className="w-7 h-7 rounded-full bg-ink-3 border flex items-center justify-center font-mono text-10 text-fg">
                     {m.name.split(" ").map((s) => s[0]).slice(0, 2).join("")}

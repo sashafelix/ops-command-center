@@ -62,7 +62,7 @@ export function SettingsShell({ section }: { section: string }) {
               aria-current={section === n.id ? "page" : undefined}
               className={cn(
                 "h-8 px-2 rounded text-12 flex items-center",
-                section === n.id ? "bg-white/[0.06] text-fg" : "text-fg-muted hover:text-fg hover:bg-white/[0.03]",
+                section === n.id ? "bg-[var(--hover)] text-fg" : "text-fg-muted hover:text-fg hover:bg-[var(--hover-soft)]",
               )}
             >
               {n.label}

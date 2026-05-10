@@ -75,7 +75,7 @@ export function ReceiptView({ id }: { id: string }) {
             {r.timeline.map((step, i) => (
               <li
                 key={`${step.t}-${i}`}
-                className={`flex items-center gap-3 px-3 py-2 ${step.current ? "bg-white/[0.04]" : ""}`}
+                className={`flex items-center gap-3 px-3 py-2 ${step.current ? "bg-[var(--hover)]" : ""}`}
               >
                 <span className="font-mono text-11 text-fg-faint num w-12 shrink-0">{step.t}</span>
                 <span className="font-mono text-11 text-fg-muted w-20 shrink-0 truncate">{step.kind}</span>

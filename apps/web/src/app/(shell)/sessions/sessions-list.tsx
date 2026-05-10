@@ -112,7 +112,7 @@ export function SessionsList() {
                       width: "100%",
                       height: ROW_HEIGHT,
                     }}
-                    className="flex items-center px-3 border-t hover:bg-white/[0.02] text-12"
+                    className="flex items-center px-3 border-t hover:bg-[var(--hover-soft)] text-12"
                   >
                     <Cell w={120}>
                       <StatusDot tone={r.status === "idle" ? "info" : r.status} label={r.id} />

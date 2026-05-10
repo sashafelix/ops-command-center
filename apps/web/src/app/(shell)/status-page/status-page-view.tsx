@@ -139,7 +139,7 @@ function ModeButton({
       className={cn(
         "h-7 px-2 text-12 rounded",
         current === mode
-          ? "bg-white/[0.06] text-fg"
+          ? "bg-[var(--hover)] text-fg"
           : "text-fg-muted hover:text-fg",
       )}
       aria-pressed={current === mode}

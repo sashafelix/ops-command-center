@@ -194,7 +194,7 @@ export function InfraOverview() {
             </thead>
             <tbody>
               {d.slos.map((s) => (
-                <tr key={s.id} className="border-t hover:bg-white/[0.02]">
+                <tr key={s.id} className="border-t hover:bg-[var(--hover-soft)]">
                   <td className="px-3 py-2 text-fg">{s.name}</td>
                   <td className="px-3 py-2 text-right font-mono text-fg-muted num">{s.target}</td>
                   <td className="px-3 py-2 text-right font-mono text-fg num">{s.actual}</td>
@@ -235,7 +235,7 @@ function Row({
 }) {
   return (
     <>
-      <tr className="border-t hover:bg-white/[0.02]">
+      <tr className="border-t hover:bg-[var(--hover-soft)]">
         <td className="px-3 py-2"><StatusDot tone={s.status} label={s.id} /></td>
         <td className="px-3 py-2 text-fg truncate">{s.name}</td>
         <td className="px-3 py-2 text-fg-muted">{s.stack}</td>

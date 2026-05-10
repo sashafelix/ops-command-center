@@ -15,7 +15,7 @@ export function ThemeToggle() {
       title="Toggle theme (T)"
       aria-label="Toggle theme"
       onClick={() => setTheme(toggleTheme())}
-      className="w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-white/5 rounded"
+      className="w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded"
     >
       {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
     </button>

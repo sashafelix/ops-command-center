@@ -18,7 +18,7 @@ export function TokensSection({ items }: { items: TokenRow[] }) {
           </thead>
           <tbody>
             {items.map((t) => (
-              <tr key={t.id} className="border-t hover:bg-white/[0.02]">
+              <tr key={t.id} className="border-t hover:bg-[var(--hover-soft)]">
                 <td className="px-3 py-2 flex items-center gap-2">
                   <Key size={11} className="text-fg-faint" aria-hidden />
                   <span className="text-fg">{t.name}</span>

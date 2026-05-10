@@ -54,7 +54,7 @@ export function Sidebar() {
           onClick={() => setCollapsed((v) => !v)}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-pressed={collapsed}
-          className="w-8 h-8 inline-flex items-center justify-center text-fg-muted hover:text-fg hover:bg-white/5 rounded"
+          className="w-8 h-8 inline-flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded"
         >
           {collapsed ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
         </button>
@@ -84,7 +84,7 @@ function SidebarItem({
         aria-current={active ? "page" : undefined}
         className={cn(
           "relative w-10 h-10 mx-auto flex items-center justify-center rounded",
-          active ? "bg-white/[0.06] text-fg" : "text-fg-dim hover:text-fg hover:bg-white/[0.03]",
+          active ? "bg-[var(--hover)] text-fg" : "text-fg-dim hover:text-fg hover:bg-[var(--hover-soft)]",
         )}
       >
         <Icon size={16} />
@@ -103,7 +103,7 @@ function SidebarItem({
       aria-current={active ? "page" : undefined}
       className={cn(
         "group relative h-8 px-2 rounded flex items-center gap-2 text-12",
-        active ? "bg-white/[0.06] text-fg" : "text-fg-muted hover:text-fg hover:bg-white/[0.03]",
+        active ? "bg-[var(--hover)] text-fg" : "text-fg-muted hover:text-fg hover:bg-[var(--hover-soft)]",
       )}
     >
       <Icon size={14} className={active ? "text-fg" : "text-fg-dim group-hover:text-fg"} />

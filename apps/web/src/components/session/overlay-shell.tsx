@@ -43,7 +43,7 @@ export function OverlayShell({ id, children }: { id: string; children: ReactNode
         <button
           type="button"
           onClick={() => router.back()}
-          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-white/5 rounded z-10"
+          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded z-10"
           aria-label="Close session"
           title="Esc"
         >

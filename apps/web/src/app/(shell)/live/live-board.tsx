@@ -291,7 +291,7 @@ function DoneTable({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-t hover:bg-white/[0.02]">
+            <tr key={r.id} className="border-t hover:bg-[var(--hover-soft)]">
               <td className="px-3 py-2"><StatusDot tone={r.status === "idle" ? "info" : r.status} label={r.id} /></td>
               <td className="px-3 py-2 text-fg truncate max-w-0"><span className="truncate inline-block max-w-full align-top">{r.goal}</span></td>
               <td className="px-3 py-2 text-fg-muted">{r.agent}</td>
