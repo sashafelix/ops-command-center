@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Key, Plus, Copy, X, ShieldCheck, Trash2 } from "lucide-react";
+import { Key, Plus, Copy, ShieldCheck, Trash2 } from "lucide-react";
+import { DialogCloseButton } from "@/components/dialog-close-button";
 import { trpc } from "@/lib/trpc/client";
 import { useReauthGate } from "@/components/reauth/reauth-gate";
 import type { TokenRow } from "@/server/mock/seed";
@@ -108,16 +109,9 @@ export function TokensSection({ items }: { items: TokenRow[] }) {
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" aria-hidden onClick={() => setOpen(false)} />
           <div className="relative panel w-full max-w-md p-5 animate-appear">
-            <header className="flex items-center justify-between mb-3">
+            <DialogCloseButton onClick={() => setOpen(false)} />
+            <header className="mb-3 pr-8">
               <h3 className="text-13 font-semibold text-fg">New API token</h3>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="w-7 h-7 flex items-center justify-center text-fg-muted hover:text-fg"
-                aria-label="Close"
-              >
-                <X size={14} aria-hidden />
-              </button>
             </header>
 
             {created ? (
