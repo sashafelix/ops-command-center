@@ -1073,6 +1073,11 @@ export const seed: Seed = {
         { k: "api_key", label: "API key", type: "secret", value: "rk_live_************************************84" },
       ], last_sync: "1 h ago",  health: "ok" },
       { id: "n8n",       name: "n8n automations",  category: "Automations",      status: "disconnected",    detail: "—",                           fields: [], last_sync: "—",        health: "warn" },
+      { id: "proxmox",   name: "Proxmox VE",       category: "Infrastructure",   status: "disconnected",    detail: "set host + token to connect",  fields: [
+        { k: "host",     label: "Host",      type: "url",    value: "" },
+        { k: "token_id", label: "Token ID",  type: "string", value: "" },
+        { k: "token",    label: "Token",     type: "secret", value: "env:PROXMOX_TOKEN" },
+      ], last_sync: "—", health: "warn" },
     ],
     members: [
       { id: "u_mara",  name: "Mara Olin",   email: "mara@ops",   role: "Owner",   mfa: true,  last_seen: "now"        },
