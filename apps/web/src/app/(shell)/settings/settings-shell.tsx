@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { StatusDot } from "@/components/status-dot";
 import { cn } from "@/lib/utils";
 import { GeneralSection } from "./sections/general";
@@ -26,8 +27,14 @@ const NAV = [
   { id: "about",         label: "About" },
 ] as const;
 
-export function SettingsShell({ section }: { section: string }) {
-  const q = trpc.settings.overview.useQuery();
+export function SettingsShell({
+  section,
+  initial,
+}: {
+  section: string;
+  initial: RouterOutputs["settings"]["overview"];
+}) {
+  const q = trpc.settings.overview.useQuery(undefined, { initialData: initial });
   if (q.isLoading || !q.data) {
     return (
       <div className="grid grid-cols-12 gap-4">

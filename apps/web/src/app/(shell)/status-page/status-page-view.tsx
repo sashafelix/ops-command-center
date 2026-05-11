@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { StatusDot } from "@/components/status-dot";
 import { Heatmap, type HeatmapRow } from "@/components/heatmap";
 import { cn } from "@/lib/utils";
 
 type Mode = "internal" | "public";
 
-export function StatusPageView() {
+export function StatusPageView({ initial }: { initial: RouterOutputs["statusPage"]["overview"] }) {
   const [mode, setMode] = useState<Mode>("internal");
-  const q = trpc.statusPage.overview.useQuery({ mode });
+  const q = trpc.statusPage.overview.useQuery(
+    { mode },
+    mode === "internal" ? { initialData: initial } : {},
+  );
 
   if (q.isLoading || !q.data) {
     return (

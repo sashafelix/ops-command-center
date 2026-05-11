@@ -3,15 +3,24 @@
 import Link from "next/link";
 import { Cpu, GitBranch, Clock, DollarSign, Terminal, ArrowRight, Pin } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
 import { fmtDur, fmtUSD, cn } from "@/lib/utils";
 
-export function LiveBoard() {
-  const kpi = trpc.live.kpi.useQuery();
+export function LiveBoard({
+  initialKpi,
+  initialBoard,
+}: {
+  initialKpi: RouterOutputs["live"]["kpi"];
+  initialBoard: RouterOutputs["sessions"]["liveBoard"];
+}) {
+  const kpi = trpc.live.kpi.useQuery(undefined, { initialData: initialKpi });
   const board = trpc.sessions.liveBoard.useQuery(undefined, {
-    refetchInterval: (q) => (typeof document !== "undefined" && document.visibilityState === "visible" ? 15_000 : false),
+    initialData: initialBoard,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.visibilityState === "visible" ? 15_000 : false,
   });
 
   return (

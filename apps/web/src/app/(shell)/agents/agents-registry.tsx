@@ -1,6 +1,7 @@
 "use client";
 
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
@@ -8,10 +9,10 @@ import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { fmtUSD, cn } from "@/lib/utils";
 import { RotateCcw, Key } from "lucide-react";
 
-export function AgentsRegistry() {
+export function AgentsRegistry({ initial }: { initial: RouterOutputs["agents"]["overview"] }) {
   const utils = trpc.useUtils();
   const { requireFreshAuth } = useReauthGate();
-  const q = trpc.agents.overview.useQuery();
+  const q = trpc.agents.overview.useQuery(undefined, { initialData: initial });
   const rollback = trpc.agents.rollback.useMutation({
     onSuccess: () => void utils.agents.overview.invalidate(),
   });

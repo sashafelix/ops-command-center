@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { Signature, ShieldAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { StatusDot } from "@/components/status-dot";
 import { Heatmap, type HeatmapRow } from "@/components/heatmap";
 import { cn } from "@/lib/utils";
 
-export function TrustView() {
-  const q = trpc.trust.overview.useQuery();
+export function TrustView({ initial }: { initial: RouterOutputs["trust"]["overview"] }) {
+  const q = trpc.trust.overview.useQuery(undefined, { initialData: initial });
 
   if (q.isLoading || !q.data) {
     return (

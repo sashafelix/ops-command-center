@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowRight } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { StatusDot } from "@/components/status-dot";
 import { fmtUSD, cn } from "@/lib/utils";
 
@@ -16,8 +17,8 @@ const SAVED_VIEWS = [
 ] as const;
 type ViewId = (typeof SAVED_VIEWS)[number]["id"];
 
-export function SessionsList() {
-  const q = trpc.sessions.list.useQuery();
+export function SessionsList({ initial }: { initial: RouterOutputs["sessions"]["list"] }) {
+  const q = trpc.sessions.list.useQuery(undefined, { initialData: initial });
   const [view, setView] = useState<ViewId>("all");
 
   const rows = useMemo(() => {
