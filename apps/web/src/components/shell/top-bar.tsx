@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { Bell, HelpCircle, LayoutGrid, Search } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
+import { AccountInitials } from "./account-initials";
 import { useCommandPalette } from "@/components/cmdk/command-palette";
 
-export function TopBar({ initials }: { initials: string }) {
+export function TopBar() {
   const { open } = useCommandPalette();
   return (
     <header className="sticky top-0 z-30 bg-ink-1/85 backdrop-blur supports-[backdrop-filter]:bg-ink-1/70 border-b">
@@ -39,7 +40,6 @@ export function TopBar({ initials }: { initials: string }) {
             className="relative w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded"
           >
             <Bell size={16} aria-hidden />
-            {/* Phase 1: dot wired in Phase 4 when notifications router lands */}
           </button>
 
           <button
@@ -60,9 +60,7 @@ export function TopBar({ initials }: { initials: string }) {
             className="flex items-center gap-2 h-8 pl-1 pr-2 hover:bg-[var(--hover)] rounded"
             aria-label="Account"
           >
-            <span className="w-7 h-7 rounded-full bg-ink-4 border flex items-center justify-center text-11 font-mono text-fg">
-              {initials}
-            </span>
+            <AccountInitials />
           </button>
         </div>
       </div>
