@@ -1,30 +1,25 @@
 import type { ReactNode } from "react";
-import { auth } from "@/lib/auth";
 import { ChromeShell } from "@/components/shell/chrome-shell";
 
-// Auth-gated chrome — never statically prerender.
-export const dynamic = "force-dynamic";
-
-export default async function ShellLayout({
+/**
+ * Chrome layout — no longer marked `force-dynamic`. The middleware already
+ * gates the route; the chrome itself doesn't need per-request data, so the
+ * App Router can re-use this RSC tree across client-side navigations.
+ *
+ * Avatar initials now come from `useSession()` inside <ChromeShell/>, so we
+ * skip the server roundtrip that was making every tab switch feel laggy.
+ */
+export default function ShellLayout({
   children,
   overlay,
 }: {
   children: ReactNode;
   overlay: ReactNode;
 }) {
-  const session = await auth();
-  const initials = pickInitials(session?.user?.name ?? session?.user?.email ?? "?");
   return (
-    <ChromeShell initials={initials}>
+    <ChromeShell>
       {children}
       {overlay}
     </ChromeShell>
   );
-}
-
-function pickInitials(s: string): string {
-  const parts = s.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return (parts[0]![0] ?? "?").toUpperCase();
-  return ((parts[0]![0] ?? "") + (parts[1]![0] ?? "")).toUpperCase();
 }
