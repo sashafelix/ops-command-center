@@ -8,6 +8,13 @@
       "when": 1778424538880,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778480136023,
+      "tag": "0001_p7_tokens_secret",
+      "breakpoints": true
     }
   ]
 }

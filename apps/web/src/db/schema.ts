@@ -548,14 +548,27 @@ export const members = pgTable("members", {
   last_seen: timestamp("last_seen", { withTimezone: true }),
 });
 
-export const tokens = pgTable("tokens", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  scope: text("scope").notNull(),
-  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  last_used: timestamp("last_used", { withTimezone: true }),
-  expires_at: timestamp("expires_at", { withTimezone: true }),
-});
+export const tokens = pgTable(
+  "tokens",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    /** Comma-separated scopes for the read-only UI list; authoritative source is `scopes`. */
+    scope: text("scope").notNull(),
+    /** Authoritative scope set used by the ingest auth check. */
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    /** SHA-256 of the raw secret. Raw secret is shown once on create and never stored. */
+    secret_hash: text("secret_hash"),
+    /** Short fingerprint shown in the UI: first 8 chars of the hash. */
+    fingerprint: text("fingerprint"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    last_used: timestamp("last_used", { withTimezone: true }),
+    expires_at: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => ({
+    by_secret_hash: index("tokens_secret_hash_idx").on(t.secret_hash),
+  }),
+);
 
 export const webhooks = pgTable("webhooks", {
   id: text("id").primaryKey(),
