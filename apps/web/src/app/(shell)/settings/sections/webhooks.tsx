@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Pencil, Check } from "lucide-react";
+import { DialogCloseButton } from "@/components/dialog-close-button";
 import { trpc } from "@/lib/trpc/client";
 import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { StatusDot } from "@/components/status-dot";
@@ -162,16 +163,9 @@ export function WebhooksSection({ items }: { items: WebhookRow[] }) {
             onClick={() => setCreating(false)}
           />
           <div className="relative panel w-full max-w-md p-5 animate-appear">
-            <header className="flex items-center justify-between mb-3">
+            <DialogCloseButton onClick={() => setCreating(false)} />
+            <header className="mb-3 pr-8">
               <h3 className="text-13 font-semibold text-fg">New webhook</h3>
-              <button
-                type="button"
-                onClick={() => setCreating(false)}
-                className="w-7 h-7 flex items-center justify-center text-fg-muted hover:text-fg"
-                aria-label="Close"
-              >
-                <X size={14} aria-hidden />
-              </button>
             </header>
 
             <label className="block text-11 text-fg-muted mb-1">URL</label>

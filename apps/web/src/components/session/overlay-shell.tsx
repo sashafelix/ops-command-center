@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { DialogCloseButton } from "@/components/dialog-close-button";
 
 /**
  * Modal shell for the intercepted /sessions/[id] route. Esc closes via
@@ -40,15 +40,7 @@ export function OverlayShell({ id, children }: { id: string; children: ReactNode
         className="relative w-full max-w-content panel max-h-[calc(100vh-4rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center text-fg-muted hover:text-fg hover:bg-[var(--hover)] rounded z-10"
-          aria-label="Close session"
-          title="Esc"
-        >
-          <X size={16} aria-hidden />
-        </button>
+        <DialogCloseButton onClick={() => router.back()} label="Close session" />
         {children}
       </div>
     </div>

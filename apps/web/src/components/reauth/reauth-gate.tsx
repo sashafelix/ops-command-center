@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import { ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import { DialogCloseButton } from "@/components/dialog-close-button";
 
 type Resolver = (ok: boolean) => void;
 
@@ -66,7 +67,8 @@ export function ReauthGate({ children }: { children: ReactNode }) {
         >
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" aria-hidden onClick={() => close(false)} />
           <div className="relative panel w-full max-w-sm p-6 animate-appear">
-            <div className="flex items-center gap-2 mb-2">
+            <DialogCloseButton onClick={() => close(false)} label="Cancel re-auth" />
+            <div className="flex items-center gap-2 mb-2 pr-8">
               <ShieldCheck size={16} className="text-violet" aria-hidden />
               <h2 className="text-13 font-semibold text-fg">Confirm it&apos;s you</h2>
             </div>
