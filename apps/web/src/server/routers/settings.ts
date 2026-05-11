@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { desc, eq, gte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, adminProcedure, router } from "../trpc";
@@ -13,14 +13,29 @@ import type { Connection } from "@/server/mock/seed";
 
 export const settingsRouter = router({
   overview: protectedProcedure.query(async () => {
-    const [workspace, connections, members, tokens, webhooks, prefs] = await Promise.all([
-      db.select().from(schema.workspace).where(eq(schema.workspace.id, "default")),
-      db.select().from(schema.connections).orderBy(schema.connections.category, schema.connections.name),
-      db.select().from(schema.members).orderBy(schema.members.role, schema.members.name),
-      db.select().from(schema.tokens).orderBy(schema.tokens.created_at),
-      db.select().from(schema.webhooks),
-      db.select().from(schema.prefs).where(eq(schema.prefs.id, "default")),
-    ]);
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const [workspace, connections, members, tokens, webhooks, prefs, deliveryStats] =
+      await Promise.all([
+        db.select().from(schema.workspace).where(eq(schema.workspace.id, "default")),
+        db.select().from(schema.connections).orderBy(schema.connections.category, schema.connections.name),
+        db.select().from(schema.members).orderBy(schema.members.role, schema.members.name),
+        db.select().from(schema.tokens).orderBy(schema.tokens.created_at),
+        db.select().from(schema.webhooks),
+        db.select().from(schema.prefs).where(eq(schema.prefs.id, "default")),
+        // Group webhook_deliveries by webhook + status for the last 24h so we
+        // can render real "delivered/total" stats instead of the seed string.
+        db
+          .select({
+            webhook_id: schema.webhook_deliveries.webhook_id,
+            status: schema.webhook_deliveries.status,
+            count: sql<number>`count(*)::int`,
+            most_recent: sql<Date | null>`max(${schema.webhook_deliveries.created_at})`,
+          })
+          .from(schema.webhook_deliveries)
+          .where(gte(schema.webhook_deliveries.created_at, since24h))
+          .groupBy(schema.webhook_deliveries.webhook_id, schema.webhook_deliveries.status),
+      ]);
 
     const w = workspace[0];
     const p = prefs[0];
@@ -74,13 +89,39 @@ export const settingsRouter = router({
         last_used: t.last_used ? ageString(t.last_used) : "—",
         expires_at: t.expires_at?.toLocaleDateString() ?? "—",
       })),
-      webhooks: webhooks.map((w) => ({
-        id: w.id,
-        url: w.url,
-        events: w.events,
-        status: w.status,
-        delivery_stats: w.delivery_stats,
-      })),
+      webhooks: webhooks.map((w) => {
+        const rows = deliveryStats.filter((r) => r.webhook_id === w.id);
+        const counts = {
+          pending: 0,
+          delivered: 0,
+          dead: 0,
+        };
+        let mostRecent: Date | null = null;
+        for (const r of rows) {
+          if (r.status === "pending") counts.pending = r.count;
+          else if (r.status === "delivered") counts.delivered = r.count;
+          else if (r.status === "dead") counts.dead = r.count;
+          if (r.most_recent && (!mostRecent || r.most_recent > mostRecent)) {
+            mostRecent = r.most_recent;
+          }
+        }
+        const total = counts.pending + counts.delivered + counts.dead;
+        const pct = total === 0 ? null : (counts.delivered / total) * 100;
+        return {
+          id: w.id,
+          url: w.url,
+          events: w.events,
+          status: w.status,
+          delivery_stats:
+            total === 0
+              ? "no deliveries in 24h"
+              : `${counts.delivered}/${total} · ${pct!.toFixed(1)}%`,
+          delivered_24h: counts.delivered,
+          pending_24h: counts.pending,
+          dead_24h: counts.dead,
+          last_delivery_at: mostRecent?.toISOString() ?? null,
+        };
+      }),
       prefs: {
         retention: p?.retention ?? "90 days",
         timezone: p?.timezone ?? "UTC",
@@ -367,6 +408,84 @@ export const settingsRouter = router({
         role: "admin",
         action: "webhook.delete",
         target: `webhook/${input.id}`,
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * Recent delivery attempts for one webhook. Powers the per-webhook detail
+   * panel; ordered newest first.
+   */
+  webhookDeliveries: protectedProcedure
+    .input(
+      z.object({
+        webhook_id: z.string().min(1).max(60),
+        limit: z.number().int().min(1).max(100).default(20),
+      }),
+    )
+    .query(async ({ input }) => {
+      const rows = await db
+        .select({
+          id: schema.webhook_deliveries.id,
+          event_id: schema.webhook_deliveries.event_id,
+          event_action: schema.webhook_deliveries.event_action,
+          status: schema.webhook_deliveries.status,
+          http_status: schema.webhook_deliveries.http_status,
+          error: schema.webhook_deliveries.error,
+          attempts: schema.webhook_deliveries.attempts,
+          created_at: schema.webhook_deliveries.created_at,
+          delivered_at: schema.webhook_deliveries.delivered_at,
+          next_retry_at: schema.webhook_deliveries.next_retry_at,
+        })
+        .from(schema.webhook_deliveries)
+        .where(eq(schema.webhook_deliveries.webhook_id, input.webhook_id))
+        .orderBy(desc(schema.webhook_deliveries.created_at))
+        .limit(input.limit);
+      return rows.map((r) => ({
+        id: r.id,
+        event_id: r.event_id,
+        event_action: r.event_action,
+        status: r.status as "pending" | "delivered" | "dead",
+        http_status: r.http_status,
+        error: r.error,
+        attempts: r.attempts,
+        created_at: r.created_at.toISOString(),
+        delivered_at: r.delivered_at?.toISOString() ?? null,
+        next_retry_at: r.next_retry_at?.toISOString() ?? null,
+      }));
+    }),
+
+  /**
+   * Re-queue a delivery for another attempt. Resets attempts to 0 and clears
+   * next_retry_at so the worker picks it up on its next tick. Useful for
+   * "the receiver was down, I fixed it, redeliver." Admin-only, audit-logged.
+   */
+  redeliverWebhook: adminProcedure
+    .input(z.object({ delivery_id: z.string().min(1).max(60) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const updated = await db
+        .update(schema.webhook_deliveries)
+        .set({
+          status: "pending",
+          attempts: 0,
+          error: null,
+          http_status: null,
+          next_retry_at: null,
+          delivered_at: null,
+        })
+        .where(eq(schema.webhook_deliveries.id, input.delivery_id))
+        .returning({ id: schema.webhook_deliveries.id, webhook_id: schema.webhook_deliveries.webhook_id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+
+      // Wake the worker so it doesn't have to wait for the next poll.
+      await db.execute(sql`SELECT pg_notify('webhook_delivery_pending', '')`);
+
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "webhook.redeliver",
+        target: `webhook_delivery/${input.delivery_id}`,
       });
       return { ok: true };
     }),

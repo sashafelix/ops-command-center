@@ -588,8 +588,56 @@ export const webhooks = pgTable("webhooks", {
   url: text("url").notNull(),
   events: jsonb("events").$type<string[]>().notNull().default([]),
   status: statusToneEnum("status").notNull(),
+  /**
+   * Cached human-readable delivery stats string used by older readers; the
+   * router computes this fresh from webhook_deliveries on every overview()
+   * call. Left here as a denormalized cache so direct DB queries see
+   * something useful too.
+   */
   delivery_stats: text("delivery_stats").notNull().default(""),
 });
+
+/**
+ * One row per webhook delivery attempt — the worker in apps/realtime polls
+ * for `status='pending'` rows whose next_retry_at has elapsed, POSTs the
+ * payload to the webhook URL with an HMAC-SHA256 signature, and updates
+ * status accordingly.
+ *
+ * State machine:
+ *   pending    → in flight or queued for retry
+ *   delivered  → received a 2xx
+ *   dead       → exhausted retries (attempts >= 5)
+ *
+ * (No separate 'failed' state — failures stay 'pending' with next_retry_at
+ *  set until they hit the dead threshold.)
+ */
+export const webhook_deliveries = pgTable(
+  "webhook_deliveries",
+  {
+    id: text("id").primaryKey(),
+    webhook_id: text("webhook_id")
+      .notNull()
+      .references(() => webhooks.id, { onDelete: "cascade" }),
+    event_id: text("event_id").notNull(),
+    event_action: text("event_action").notNull(),
+    /** Full audit row body (id, ts, actor, role, action, target, ip, ua, hash, prev_hash). */
+    payload: jsonb("payload").notNull(),
+    status: text("status").notNull().default("pending"),
+    http_status: integer("http_status"),
+    error: text("error"),
+    attempts: integer("attempts").notNull().default(0),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    delivered_at: timestamp("delivered_at", { withTimezone: true }),
+    next_retry_at: timestamp("next_retry_at", { withTimezone: true }),
+  },
+  (t) => ({
+    by_webhook_recent: index("webhook_deliveries_webhook_id_created_at_idx").on(
+      t.webhook_id,
+      t.created_at,
+    ),
+    pending_ready: index("webhook_deliveries_pending_idx").on(t.next_retry_at),
+  }),
+);
 
 export const prefs = pgTable("prefs", {
   /** Singleton row. Per-user prefs land in P7 once we have real auth + accounts beyond the dev bypass. */

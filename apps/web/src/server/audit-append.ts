@@ -1,7 +1,14 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AuditRow } from "@ops/shared";
 import { db, schema } from "@/db/client";
+
+/**
+ * Wildcard event name: any webhook subscribed to this fires for every audit
+ * event. Lets operators set up an "audit archive" sink without enumerating
+ * every action name.
+ */
+const AUDIT_ROW_WILDCARD = "audit.row";
 
 /**
  * Sync canonical-json mirror of packages/shared/audit/canonical. Kept local to
@@ -72,6 +79,49 @@ export async function appendAuditEvent(input: {
       prev_hash,
     });
 
-    return { ...body, prev_hash, hash } satisfies AuditRow;
+    const fullRow = { ...body, prev_hash, hash } satisfies AuditRow;
+
+    // Fan out to webhook subscribers. Same transaction so deliveries can't
+    // exist without their source audit row (and vice versa under rollback).
+    await enqueueWebhookDeliveries(tx, fullRow);
+
+    return fullRow;
   });
+}
+
+/**
+ * For every active webhook subscribed to this event's action (or to the
+ * audit.row wildcard), insert a pending webhook_deliveries row. The realtime
+ * worker picks them up via LISTEN/NOTIFY + poll.
+ *
+ * Webhooks whose status is "warn" (paused) are skipped — pausing means
+ * "stop firing," not "buffer until I un-pause."
+ */
+async function enqueueWebhookDeliveries(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  row: AuditRow,
+): Promise<void> {
+  // Find webhooks where the events array contains the action OR "audit.row".
+  // jsonb `?|` matches any element of a Postgres text[] against the jsonb
+  // array — drizzle doesn't model this operator natively, so dropping to sql.
+  const matches = await tx.execute<{ id: string }>(
+    sql`SELECT id FROM ${schema.webhooks}
+        WHERE status <> 'warn'
+          AND events ?| ARRAY[${row.action}, ${AUDIT_ROW_WILDCARD}]`,
+  );
+
+  if (matches.length === 0) return;
+
+  for (const w of matches) {
+    await tx.insert(schema.webhook_deliveries).values({
+      id: `whd_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
+      webhook_id: w.id,
+      event_id: row.id,
+      event_action: row.action,
+      payload: row,
+    });
+  }
+
+  // Wake the realtime worker so it doesn't have to wait for the next poll.
+  await tx.execute(sql`SELECT pg_notify('webhook_delivery_pending', '')`);
 }

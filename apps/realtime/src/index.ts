@@ -7,6 +7,7 @@ import { TopicHub, type Subscriber } from "./topics";
 import { nextNowPlayingTick } from "./mock-source";
 import { startPgListener } from "./pg-listen";
 import { startSyncTick } from "./sync-tick";
+import { startWebhookTick } from "./webhook-tick";
 
 const HOST = process.env.REALTIME_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.REALTIME_PORT ?? 4001);
@@ -105,3 +106,8 @@ void startPgListener(hub).catch((err: unknown) => {
 
 // Periodic connector sync (Proxmox → Infra, etc.). Skips if SYNC_SECRET unset.
 startSyncTick();
+
+// Webhook delivery worker — POSTs registered URLs when audit events match.
+void startWebhookTick().catch((err: unknown) => {
+  console.error("[realtime] webhook tick failed to start", err);
+});
