@@ -5,6 +5,7 @@ import { WsClientMessage } from "@ops/shared";
 import { verifyUpgradeToken } from "./auth";
 import { TopicHub, type Subscriber } from "./topics";
 import { nextNowPlayingTick } from "./mock-source";
+import { startPgListener } from "./pg-listen";
 
 const HOST = process.env.REALTIME_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.REALTIME_PORT ?? 4001);
@@ -94,4 +95,9 @@ setInterval(() => {
 
 server.listen(PORT, HOST, () => {
   console.log(`[realtime] ws://${HOST}:${PORT} ready`);
+});
+
+// Bridge Postgres NOTIFY → WS hub. Skips gracefully if DATABASE_URL is unset.
+void startPgListener(hub).catch((err: unknown) => {
+  console.error("[realtime] pg listener failed", err);
 });

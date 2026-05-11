@@ -6,6 +6,7 @@ import { protectedProcedure, adminProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
 import { appendAuditEvent } from "../audit-append";
 import { requireFreshAuth } from "../reauth";
+import { mintApiToken, VALID_SCOPES, type Scope } from "../api-tokens";
 
 export const settingsRouter = router({
   overview: protectedProcedure.query(async () => {
@@ -125,7 +126,6 @@ export const settingsRouter = router({
       const set: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(input)) if (v !== undefined) set[k] = v;
       if (Object.keys(set).length === 0) return { ok: true };
-      // prefs is a singleton row; upsert in case it hasn't been seeded yet
       await db
         .insert(schema.prefs)
         .values({ id: "default", ...set } as typeof schema.prefs.$inferInsert)
@@ -217,8 +217,45 @@ export const settingsRouter = router({
     }),
 
   // ===========================================================================
-  // Tokens — revoke. Create lives in P7.
+  // Tokens — create (from P7) + revoke
   // ===========================================================================
+
+  /**
+   * Admin-only: mint a new API token. Returns the raw secret exactly once;
+   * the DB stores only the SHA-256. Caller must show it to the operator with
+   * "copy this now, you won't see it again" copy.
+   */
+  createToken: adminProcedure
+    .input(
+      z.object({
+        name: z.string().min(2).max(60),
+        scopes: z.array(z.enum(VALID_SCOPES)).min(1),
+        expires_in_days: z.number().int().min(1).max(365 * 5).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const id = `tok_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      const expires_at = input.expires_in_days
+        ? new Date(Date.now() + input.expires_in_days * 24 * 60 * 60 * 1000)
+        : undefined;
+      const { secret, row } = await mintApiToken({
+        id,
+        name: input.name,
+        scopes: input.scopes as Scope[],
+        expires_at,
+      });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "token.create",
+        target: `token/${id}`,
+      });
+      return {
+        secret,
+        token: { id: row.id, name: row.name, scopes: row.scopes, fingerprint: row.fingerprint },
+      };
+    }),
 
   revokeToken: adminProcedure
     .input(z.object({ id: z.string() }))
@@ -239,7 +276,7 @@ export const settingsRouter = router({
     }),
 
   // ===========================================================================
-  // Webhooks — edit + delete + toggle
+  // Webhooks — create + edit + delete + toggle
   // ===========================================================================
 
   saveWebhook: adminProcedure
