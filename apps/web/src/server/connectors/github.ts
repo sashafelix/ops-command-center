@@ -6,6 +6,15 @@ const DEFAULT_API = "https://api.github.com";
 
 export const githubConnector: Connector = {
   id: "github",
+  name: "GitHub",
+  category: "Repos",
+  requiredFieldKeys: ["token"],
+  defaultFields() {
+    return [
+      { k: "host", label: "Host", type: "url", value: "https://github.com" },
+      { k: "token", label: "Personal token", type: "secret", value: "env:GITHUB_TOKEN" },
+    ];
+  },
   async test(c: Connection): Promise<ConnectorTest> {
     const host = fieldValue(c, "host") ?? "https://github.com";
     const api = host === "https://github.com" ? DEFAULT_API : `${host}/api/v3`;

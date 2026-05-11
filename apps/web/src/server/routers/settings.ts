@@ -7,7 +7,8 @@ import { db, schema } from "@/db/client";
 import { appendAuditEvent } from "../audit-append";
 import { requireFreshAuth } from "../reauth";
 import { mintApiToken, VALID_SCOPES, type Scope } from "../api-tokens";
-import { connectorFor } from "../connectors/registry";
+import { connectorFor, CONNECTORS } from "../connectors/registry";
+import { deriveStatus } from "../connectors/derive-status";
 import type { Connection } from "@/server/mock/seed";
 
 export const settingsRouter = router({
@@ -31,16 +32,32 @@ export const settingsRouter = router({
         created_at: w?.created_at ?? "—",
         tier: w?.tier ?? "—",
       },
-      connections: connections.map((c) => ({
-        id: c.id,
-        name: c.name,
-        category: c.category,
-        status: c.status as "connected" | "needs-attention" | "disconnected",
-        detail: c.detail,
-        fields: c.fields,
-        last_sync: c.last_sync,
-        health: c.health,
-      })),
+      connections: connections.map((c) => {
+        // Derived status — single source of truth. The DB status/health are
+        // cached values updated by mutations; this re-derives on every read
+        // so the UI never lies about state.
+        const derived = deriveStatus({
+          id: c.id,
+          fields: c.fields,
+          last_test_at: c.last_test_at,
+          last_test_ok: c.last_test_ok,
+        });
+        return {
+          id: c.id,
+          name: c.name,
+          category: c.category,
+          status: derived.status,
+          detail: c.detail,
+          fields: c.fields,
+          last_sync: c.last_sync,
+          health: derived.health,
+          last_test_at: c.last_test_at?.toISOString() ?? null,
+          last_test_detail: c.last_test_detail ?? null,
+          last_test_ok: c.last_test_ok ?? null,
+          /** Whether a connector implementation exists (Test button enabled). */
+          has_connector: connectorFor(c.id) !== undefined,
+        };
+      }),
       members: members.map((m) => ({
         id: m.id,
         name: m.name,
@@ -360,14 +377,13 @@ export const settingsRouter = router({
 
   /**
    * Update the editable values on a connection (host, token, env: refs, …).
-   * The client only sends `{k, value}` pairs; we preserve the field shape
-   * (label, type) from the existing row so the connector spec stays
-   * authoritative. Admin-only, fresh-auth-gated, audit-logged.
+   * Preserves the field shape (label, type) from the existing row so the
+   * connector spec stays authoritative. If any field value actually changes,
+   * clears the prior test result — last test was against different inputs,
+   * so it no longer means anything.
    *
-   * We deliberately do NOT include field values in the audit row — secrets
-   * (or env-var references) are not the kind of thing we want in audit logs.
-   * The "what changed" detail is the connection id; pair it with the
-   * connection.test events that follow to read the story.
+   * Audit row carries the connection id but never field values. Secrets and
+   * env-var refs shouldn't end up in audit logs.
    */
   saveConnection: adminProcedure
     .input(
@@ -398,9 +414,30 @@ export const settingsRouter = router({
         value: byK.has(f.k) ? byK.get(f.k)! : f.value,
       }));
 
+      const changed = fields.some((f, i) => f.value !== row.fields[i]?.value);
+
+      // If values changed, the previous test result no longer applies.
+      const update = {
+        fields,
+        ...(changed
+          ? {
+              last_test_at: null,
+              last_test_detail: null,
+              last_test_ok: null,
+            }
+          : {}),
+      };
+
+      const derived = deriveStatus({
+        id: row.id,
+        fields,
+        last_test_at: changed ? null : row.last_test_at,
+        last_test_ok: changed ? null : row.last_test_ok,
+      });
+
       await db
         .update(schema.connections)
-        .set({ fields })
+        .set({ ...update, status: derived.status, health: derived.health })
         .where(eq(schema.connections.id, input.id));
 
       await appendAuditEvent({
@@ -410,7 +447,7 @@ export const settingsRouter = router({
         target: `connection/${input.id}`,
       });
 
-      return { ok: true as const };
+      return { ok: true as const, changed };
     }),
 
   testConnection: adminProcedure
@@ -428,7 +465,6 @@ export const settingsRouter = router({
         return { ok: false, detail: "no connector implemented for this connection (stub-only)" } as const;
       }
 
-      // Shape the DB row into the Connection type the connector expects
       const conn: Connection = {
         id: row.id,
         name: row.name,
@@ -441,12 +477,24 @@ export const settingsRouter = router({
       };
 
       const result = await connector.test(conn);
+      const testedAt = new Date();
+      const testDetail = result.ok ? result.detail : result.reason;
+
+      const derived = deriveStatus({
+        id: row.id,
+        fields: row.fields,
+        last_test_at: testedAt,
+        last_test_ok: result.ok,
+      });
 
       await db
         .update(schema.connections)
         .set({
-          health: result.ok ? "ok" : "bad",
-          status: result.ok ? "connected" : "needs-attention",
+          last_test_at: testedAt,
+          last_test_detail: testDetail,
+          last_test_ok: result.ok,
+          status: derived.status,
+          health: derived.health,
           detail: result.ok ? result.detail : `error · ${result.reason}`,
           last_sync: result.ok ? "just now" : row.last_sync,
         })
@@ -461,6 +509,105 @@ export const settingsRouter = router({
 
       if (result.ok) return { ok: true as const, detail: result.detail };
       return { ok: false as const, detail: result.reason };
+    }),
+
+  /**
+   * List the connector types operators can spin up new instances of. Drives
+   * the "New connection" picker. Stub-only types aren't here — there's
+   * nothing useful you can do with them yet.
+   */
+  listConnectorTypes: protectedProcedure.query(() => {
+    return Object.values(CONNECTORS).map((c) => ({
+      id: c.id,
+      name: c.name,
+      category: c.category,
+    }));
+  }),
+
+  /**
+   * Create a fresh connection instance from a connector type. Pre-populates
+   * fields from the connector's defaultFields(). Admin-only, fresh-auth.
+   */
+  createConnection: adminProcedure
+    .input(
+      z.object({
+        type_id: z.string().min(1).max(60),
+        instance_id: z
+          .string()
+          .regex(/^[a-z0-9_-]+$/, "lowercase letters, digits, _ and - only")
+          .min(2)
+          .max(60)
+          .optional(),
+        name: z.string().min(1).max(120).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const connector = CONNECTORS[input.type_id];
+      if (!connector) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "unknown connector type" });
+      }
+
+      const id = input.instance_id ?? input.type_id;
+      const existing = await db
+        .select({ id: schema.connections.id })
+        .from(schema.connections)
+        .where(eq(schema.connections.id, id));
+      if (existing.length > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `connection id "${id}" already exists — pass a different instance_id`,
+        });
+      }
+
+      const fields = connector.defaultFields();
+      const derived = deriveStatus({
+        id,
+        fields,
+        last_test_at: null,
+        last_test_ok: null,
+      });
+
+      await db.insert(schema.connections).values({
+        id,
+        name: input.name ?? connector.name,
+        category: connector.category,
+        status: derived.status,
+        detail: "fill in fields and click Test to verify",
+        fields,
+        last_sync: "—",
+        health: derived.health,
+      });
+
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "connection.create",
+        target: `connection/${id}`,
+      });
+
+      return { ok: true as const, id };
+    }),
+
+  /** Permanently delete a connection. Admin-only, fresh-auth, audit-logged. */
+  deleteConnection: adminProcedure
+    .input(z.object({ id: z.string().min(1).max(60) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const removed = await db
+        .delete(schema.connections)
+        .where(eq(schema.connections.id, input.id))
+        .returning({ id: schema.connections.id });
+      if (removed.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "connection.delete",
+        target: `connection/${input.id}`,
+      });
+
+      return { ok: true as const };
     }),
 
   /** Admin-only — destructive workspace config touches secrets. */

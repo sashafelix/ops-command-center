@@ -15,6 +15,13 @@
       "when": 1778480136023,
       "tag": "0001_p7_tokens_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778516576211,
+      "tag": "0002_connections_test_history",
+      "breakpoints": true
     }
   ]
 }

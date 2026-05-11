@@ -376,11 +376,24 @@ export type Connection = {
   id: string;
   name: string;
   category: string;
-  status: "connected" | "needs-attention" | "disconnected";
+  /**
+   * Derived status — the router computes this from the connector registry,
+   * field completeness, and test history (see deriveStatus). The DB still
+   * has a `status` column for back-compat with other consumers, but every
+   * tRPC response uses the derived value.
+   */
+  status: "stub" | "incomplete" | "unverified" | "connected" | "needs-attention" | "disconnected";
   detail: string;
   fields: ConnectionField[];
   last_sync: string;
   health: "ok" | "warn" | "bad" | "info" | "violet";
+  /** Last successful or failed test — ISO string from the API. Optional in
+   *  seed mocks; the router always returns explicit null/value pairs. */
+  last_test_at?: string | null;
+  last_test_detail?: string | null;
+  last_test_ok?: boolean | null;
+  /** True when a connector implementation exists for this id (router-supplied). */
+  has_connector?: boolean;
 };
 
 export type MemberRow = {
@@ -1042,45 +1055,52 @@ export const seed: Seed = {
       tier: "Enterprise",
     },
     connections: [
-      { id: "anthropic", name: "Anthropic API",   category: "Model providers",  status: "connected",       detail: "sk-ant-…6c4f · 3 keys",     fields: [
+      // Implemented connectors — start with env: refs as the secret default.
+      // The router derives status from real test history, so these will
+      // render as "incomplete" or "unverified" until the operator runs Test.
+      { id: "anthropic", name: "Anthropic API", category: "Model providers", status: "unverified", detail: "set API key to connect", fields: [
         { k: "base_url", label: "Base URL", type: "url",    value: "https://api.anthropic.com/v1" },
-        { k: "api_key",  label: "API key",  type: "secret", value: "sk-ant-api03-************************6c4f" },
-      ], last_sync: "12s ago", health: "ok" },
-      { id: "openai",    name: "OpenAI API",      category: "Model providers",  status: "connected",       detail: "sk-…2e0a · 1 key",         fields: [
-        { k: "api_key", label: "API key", type: "secret", value: "sk-proj-************************2e0a" },
-      ], last_sync: "2 min ago", health: "ok" },
-      { id: "github",    name: "GitHub",           category: "Repos",            status: "connected",       detail: "github.com/anthropic-ops · 24 repos", fields: [
-        { k: "host",  label: "Host",          type: "url",    value: "https://github.com" },
-        { k: "token", label: "Personal token", type: "secret", value: "ghp_*****************************4Zk" },
-      ], last_sync: "44s ago", health: "ok" },
-      { id: "slack",     name: "Slack",            category: "Notifications",    status: "connected",       detail: "T0…98 · #sec-ops · #ops",   fields: [
-        { k: "bot_token", label: "Bot token", type: "secret", value: "xoxb-************************************Z2" },
-      ], last_sync: "1 min ago", health: "ok" },
-      { id: "pagerduty", name: "PagerDuty",        category: "Notifications",    status: "needs-attention", detail: "key rotates in 4 days",      fields: [
-        { k: "service_key", label: "Service key", type: "secret", value: "pd-************************************84" },
-      ], last_sync: "4 h ago", health: "warn" },
-      { id: "vault",     name: "HashiCorp Vault",  category: "Secrets",          status: "connected",       detail: "vault.internal · token TTL 24h", fields: [
-        { k: "addr",  label: "Address",  type: "url",    value: "https://vault.internal" },
-        { k: "token", label: "Token",    type: "secret", value: "hvs.************************************AB" },
-      ], last_sync: "8 min ago", health: "ok" },
-      { id: "datadog",   name: "Datadog",          category: "Observability",    status: "connected",       detail: "us3.datadoghq.com · 18 monitors", fields: [
-        { k: "api_key", label: "API key", type: "secret", value: "dd-************************************7c" },
-      ], last_sync: "21s ago", health: "ok" },
-      { id: "opensearch", name: "OpenSearch",      category: "Data",             status: "connected",       detail: "events-* + receipts-*",      fields: [
-        { k: "host", label: "Host", type: "url", value: "https://oss.internal:9200" },
-      ], last_sync: "live",     health: "ok" },
-      { id: "stripe",    name: "Stripe",            category: "Billing",          status: "connected",       detail: "acct_1Q…4j · live",          fields: [
-        { k: "api_key", label: "API key", type: "secret", value: "rk_live_************************************84" },
-      ], last_sync: "1 h ago",  health: "ok" },
-      { id: "n8n",       name: "n8n automations",  category: "Automations",      status: "disconnected",    detail: "set base URL + API key to connect", fields: [
-        { k: "base_url",       label: "Base URL",       type: "url",    value: "" },
-        { k: "api_key",        label: "API key",        type: "secret", value: "env:N8N_API_KEY" },
-        { k: "webhook_secret", label: "Webhook secret", type: "secret", value: "env:N8N_WEBHOOK_SECRET" },
+        { k: "api_key",  label: "API key",  type: "secret", value: "env:ANTHROPIC_API_KEY" },
       ], last_sync: "—", health: "warn" },
-      { id: "proxmox",   name: "Proxmox VE",       category: "Infrastructure",   status: "disconnected",    detail: "set host + token to connect",  fields: [
+      { id: "github", name: "GitHub", category: "Repos", status: "unverified", detail: "set token to connect", fields: [
+        { k: "host",  label: "Host",          type: "url",    value: "https://github.com" },
+        { k: "token", label: "Personal token", type: "secret", value: "env:GITHUB_TOKEN" },
+      ], last_sync: "—", health: "warn" },
+      { id: "proxmox", name: "Proxmox VE", category: "Infrastructure", status: "incomplete", detail: "set host + token to connect", fields: [
         { k: "host",     label: "Host",      type: "url",    value: "" },
         { k: "token_id", label: "Token ID",  type: "string", value: "" },
         { k: "token",    label: "Token",     type: "secret", value: "env:PROXMOX_TOKEN" },
+      ], last_sync: "—", health: "warn" },
+
+      // Stub-only connectors — no client code exists yet. They render as
+      // "stub" in the UI with no Test button until someone implements the
+      // connector. Field shape is best-effort so the cards aren't blank.
+      { id: "openai",     name: "OpenAI API",       category: "Model providers",  status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "api_key", label: "API key", type: "secret", value: "env:OPENAI_API_KEY" },
+      ], last_sync: "—", health: "warn" },
+      { id: "slack",      name: "Slack",            category: "Notifications",    status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "bot_token", label: "Bot token", type: "secret", value: "env:SLACK_BOT_TOKEN" },
+      ], last_sync: "—", health: "warn" },
+      { id: "pagerduty",  name: "PagerDuty",        category: "Notifications",    status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "service_key", label: "Service key", type: "secret", value: "env:PAGERDUTY_SERVICE_KEY" },
+      ], last_sync: "—", health: "warn" },
+      { id: "vault",      name: "HashiCorp Vault",  category: "Secrets",          status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "addr",  label: "Address", type: "url",    value: "https://vault.internal" },
+        { k: "token", label: "Token",   type: "secret", value: "env:VAULT_TOKEN" },
+      ], last_sync: "—", health: "warn" },
+      { id: "datadog",    name: "Datadog",          category: "Observability",    status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "api_key", label: "API key", type: "secret", value: "env:DATADOG_API_KEY" },
+      ], last_sync: "—", health: "warn" },
+      { id: "opensearch", name: "OpenSearch",       category: "Data",             status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "host", label: "Host", type: "url", value: "" },
+      ], last_sync: "—", health: "warn" },
+      { id: "stripe",     name: "Stripe",           category: "Billing",          status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "api_key", label: "API key", type: "secret", value: "env:STRIPE_API_KEY" },
+      ], last_sync: "—", health: "warn" },
+      { id: "n8n",        name: "n8n automations",  category: "Automations",      status: "stub", detail: "connector not yet implemented", fields: [
+        { k: "base_url",       label: "Base URL",       type: "url",    value: "" },
+        { k: "api_key",        label: "API key",        type: "secret", value: "env:N8N_API_KEY" },
+        { k: "webhook_secret", label: "Webhook secret", type: "secret", value: "env:N8N_WEBHOOK_SECRET" },
       ], last_sync: "—", health: "warn" },
     ],
     members: [

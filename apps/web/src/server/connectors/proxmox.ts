@@ -47,6 +47,16 @@ type Guest = {
 
 export const proxmoxConnector: Connector = {
   id: "proxmox",
+  name: "Proxmox VE",
+  category: "Infrastructure",
+  requiredFieldKeys: ["host", "token_id", "token"],
+  defaultFields() {
+    return [
+      { k: "host", label: "Host", type: "url", value: "" },
+      { k: "token_id", label: "Token ID", type: "string", value: "" },
+      { k: "token", label: "Token", type: "secret", value: "env:PROXMOX_TOKEN" },
+    ];
+  },
   async test(c: Connection): Promise<ConnectorTest> {
     const auth = buildAuthHeader(c);
     if (!auth.ok) return { ok: false, reason: auth.reason };

@@ -528,6 +528,13 @@ export const connections = pgTable("connections", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   category: text("category").notNull(),
+  /**
+   * Display status — derived from real signals (last test result, field
+   * completeness, connector availability). Allowed values:
+   *   stub | incomplete | unverified | connected | needs-attention
+   * The router computes the value on every save/test; the DB stores it so
+   * the dashboard can render without recomputing.
+   */
   status: text("status").notNull(),
   detail: text("detail").notNull(),
   /** Field config (JSONB so adding a field doesn't require a migration). */
@@ -537,6 +544,12 @@ export const connections = pgTable("connections", {
     .default([]),
   last_sync: text("last_sync").notNull(),
   health: statusToneEnum("health").notNull(),
+  /** When the connector last successfully tested. Null if never tested. */
+  last_test_at: timestamp("last_test_at", { withTimezone: true }),
+  /** Short detail line from the most recent test (success or failure). */
+  last_test_detail: text("last_test_detail"),
+  /** Whether the most recent test passed. Null if never tested. */
+  last_test_ok: boolean("last_test_ok"),
 });
 
 export const members = pgTable("members", {
