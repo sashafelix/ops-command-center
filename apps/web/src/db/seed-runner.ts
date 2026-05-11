@@ -303,8 +303,11 @@ async function main() {
       });
     }
     for (const d of MOCK.agents.deploys) {
+      // The seed uses overlapping ids with infra service deploys; namespace
+      // agent deploys to avoid the shared `deploys.id` PK collision.
+      const id = d.id.startsWith("agdep_") ? d.id : `agdep_${d.id}`;
       await tx.insert(schema.deploys).values({
-        id: d.id,
+        id,
         target_kind: "agent",
         service_or_agent_id: d.agent,
         version: d.to,
