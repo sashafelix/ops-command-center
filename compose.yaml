@@ -75,6 +75,8 @@ services:
       PROXMOX_TOKEN: ${PROXMOX_TOKEN:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      N8N_API_KEY: ${N8N_API_KEY:-}
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-}
     ports:
       - "${WEB_PORT:-3000}:3000"
     healthcheck:

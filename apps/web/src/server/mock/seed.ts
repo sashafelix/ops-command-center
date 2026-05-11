@@ -1072,7 +1072,11 @@ export const seed: Seed = {
       { id: "stripe",    name: "Stripe",            category: "Billing",          status: "connected",       detail: "acct_1Q…4j · live",          fields: [
         { k: "api_key", label: "API key", type: "secret", value: "rk_live_************************************84" },
       ], last_sync: "1 h ago",  health: "ok" },
-      { id: "n8n",       name: "n8n automations",  category: "Automations",      status: "disconnected",    detail: "—",                           fields: [], last_sync: "—",        health: "warn" },
+      { id: "n8n",       name: "n8n automations",  category: "Automations",      status: "disconnected",    detail: "set base URL + API key to connect", fields: [
+        { k: "base_url",       label: "Base URL",       type: "url",    value: "" },
+        { k: "api_key",        label: "API key",        type: "secret", value: "env:N8N_API_KEY" },
+        { k: "webhook_secret", label: "Webhook secret", type: "secret", value: "env:N8N_WEBHOOK_SECRET" },
+      ], last_sync: "—", health: "warn" },
       { id: "proxmox",   name: "Proxmox VE",       category: "Infrastructure",   status: "disconnected",    detail: "set host + token to connect",  fields: [
         { k: "host",     label: "Host",      type: "url",    value: "" },
         { k: "token_id", label: "Token ID",  type: "string", value: "" },
