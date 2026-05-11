@@ -2,11 +2,12 @@
 
 import { Calendar, Download, FileText, ShieldCheck } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { cn } from "@/lib/utils";
 
-export function ReportsView() {
-  const q = trpc.reports.overview.useQuery();
+export function ReportsView({ initial }: { initial: RouterOutputs["reports"]["overview"] }) {
+  const q = trpc.reports.overview.useQuery(undefined, { initialData: initial });
   if (q.isLoading || !q.data) {
     return (
       <div className="flex flex-col gap-4">

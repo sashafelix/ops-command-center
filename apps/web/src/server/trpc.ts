@@ -10,6 +10,8 @@ const t = initTRPC.context<Context>().create({
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
+/** Factory used by the RSC server caller (see lib/trpc/server.ts). */
+export const createCallerFactory = t.createCallerFactory;
 
 /** Procedure that requires an authenticated session. */
 export const protectedProcedure = t.procedure.use(({ ctx, next }) => {

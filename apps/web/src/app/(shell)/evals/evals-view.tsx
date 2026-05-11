@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Play } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
@@ -11,8 +12,8 @@ import { cn } from "@/lib/utils";
 
 type Toast = { id: string; suite: string; runId: string };
 
-export function EvalsView() {
-  const q = trpc.evals.overview.useQuery();
+export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overview"] }) {
+  const q = trpc.evals.overview.useQuery(undefined, { initialData: initial });
   const { requireFreshAuth } = useReauthGate();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const run = trpc.evals.runSuite.useMutation({

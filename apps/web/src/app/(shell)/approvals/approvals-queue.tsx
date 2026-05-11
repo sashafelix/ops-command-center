@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect } from "react";
 import { Check, X, Pencil, Pause, Clock, ArrowRight } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { StatusDot } from "@/components/status-dot";
 import { useCountdown, fmtCountdown } from "@/components/approvals/countdown";
@@ -13,10 +14,13 @@ import { cn } from "@/lib/utils";
 
 type Decision = "approve" | "deny" | "edit" | "snooze";
 
-export function ApprovalsQueue() {
+export function ApprovalsQueue({ initial }: { initial: RouterOutputs["approvals"]["inbox"] }) {
   const utils = trpc.useUtils();
   const { requireFreshAuth } = useReauthGate();
-  const inbox = trpc.approvals.inbox.useQuery(undefined, { staleTime: 5_000 });
+  const inbox = trpc.approvals.inbox.useQuery(undefined, {
+    initialData: initial,
+    staleTime: 5_000,
+  });
 
   const decide = trpc.approvals.decide.useMutation({
     onMutate: async ({ id }) => {

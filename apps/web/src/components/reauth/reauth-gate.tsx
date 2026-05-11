@@ -23,7 +23,9 @@ export function useReauthGate(): Ctx {
 }
 
 export function ReauthGate({ children }: { children: ReactNode }) {
-  const status = trpc.auth.reauthStatus.useQuery(undefined, { staleTime: 30_000 });
+  // The freshness window is 5 min; check at half that so we re-verify roughly
+  // once per session. Stops the redundant tRPC fire on every page mount.
+  const status = trpc.auth.reauthStatus.useQuery(undefined, { staleTime: 150_000 });
   const utils = trpc.useUtils();
   const confirm = trpc.auth.reauthConfirm.useMutation({
     onSuccess: () => void utils.auth.reauthStatus.invalidate(),

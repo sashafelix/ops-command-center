@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
@@ -10,8 +11,8 @@ import { burnPct, burnTone } from "@/components/budget/burn";
 import { MtdBurnChart } from "@/components/budget/mtd-burn-chart";
 import { fmtUSD, cn } from "@/lib/utils";
 
-export function BudgetsView() {
-  const q = trpc.budgets.overview.useQuery();
+export function BudgetsView({ initial }: { initial: RouterOutputs["budgets"]["overview"] }) {
+  const q = trpc.budgets.overview.useQuery(undefined, { initialData: initial });
 
   if (q.isLoading || !q.data) {
     return (

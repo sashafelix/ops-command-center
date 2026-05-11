@@ -1,13 +1,19 @@
 "use client";
 
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { StatusDot } from "@/components/status-dot";
 import { Heatmap, type HeatmapRow } from "@/components/heatmap";
 import { cn } from "@/lib/utils";
 
-export function InfraOverview() {
+export function InfraOverview({
+  initial,
+}: {
+  initial: RouterOutputs["infra"]["overview"];
+}) {
   const q = trpc.infra.overview.useQuery(undefined, {
+    initialData: initial,
     refetchInterval: () =>
       typeof document !== "undefined" && document.visibilityState === "visible" ? 20_000 : false,
   });

@@ -4,17 +4,31 @@ import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { CheckCircle2, XCircle, Loader2, Download } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
+import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { verifyChain, type AuditRow, type ChainVerification } from "@ops/shared";
 import { cn } from "@/lib/utils";
 
 const ROW_HEIGHT = 32;
 
-export function AuditLogView() {
-  const kpi = trpc.auditLog.kpi.useQuery();
-  const facets = trpc.auditLog.facets.useQuery();
-  const list = trpc.auditLog.list.useQuery({ limit: 500, offset: 0 });
-  const chain = trpc.auditLog.chain.useQuery();
+export function AuditLogView({
+  initialKpi,
+  initialFacets,
+  initialList,
+}: {
+  initialKpi: RouterOutputs["auditLog"]["kpi"];
+  initialFacets: RouterOutputs["auditLog"]["facets"];
+  initialList: RouterOutputs["auditLog"]["list"];
+}) {
+  const kpi = trpc.auditLog.kpi.useQuery(undefined, { initialData: initialKpi });
+  const facets = trpc.auditLog.facets.useQuery(undefined, { initialData: initialFacets });
+  const list = trpc.auditLog.list.useQuery(
+    { limit: 500, offset: 0 },
+    { initialData: initialList },
+  );
+  // Heavy (~400 KB). Don't fetch until the user clicks Verify or Export.
+  const [chainEnabled, setChainEnabled] = useState(false);
+  const chain = trpc.auditLog.chain.useQuery(undefined, { enabled: chainEnabled });
 
   const [filterActor, setFilterActor] = useState<string>("");
   const [filterAction, setFilterAction] = useState<string>("");
@@ -34,11 +48,20 @@ export function AuditLogView() {
     });
   }, [list.data?.rows, filterActor, filterAction]);
 
+  async function ensureChain(): Promise<AuditRow[] | null> {
+    if (chain.data) return chain.data as unknown as AuditRow[];
+    setChainEnabled(true);
+    setVerifyState({ status: "running" });
+    const r = await chain.refetch();
+    return (r.data as unknown as AuditRow[] | undefined) ?? null;
+  }
+
   async function runVerify() {
-    if (!chain.data) return;
+    const data = await ensureChain();
+    if (!data) return;
     setVerifyState({ status: "running" });
     const t0 = performance.now();
-    const result: ChainVerification = await verifyChain(chain.data as unknown as AuditRow[]);
+    const result: ChainVerification = await verifyChain(data);
     const elapsed_ms = performance.now() - t0;
     if (result.ok) {
       setVerifyState({ status: "ok", elapsed_ms, rows: result.rowsChecked });
@@ -52,9 +75,9 @@ export function AuditLogView() {
     }
   }
 
-  function exportRows(format: "csv" | "jsonl") {
-    if (!chain.data) return;
-    const data = chain.data as unknown as AuditRow[];
+  async function exportRows(format: "csv" | "jsonl") {
+    const data = await ensureChain();
+    if (!data) return;
     const blob =
       format === "jsonl"
         ? new Blob([data.map((r) => JSON.stringify(r)).join("\n")], { type: "application/x-ndjson" })
@@ -90,7 +113,7 @@ export function AuditLogView() {
           <ChainChip state={verifyState} onClick={runVerify} loading={!chain.data} />
           <button
             type="button"
-            onClick={() => exportRows("csv")}
+            onClick={() => void exportRows("csv")}
             disabled={!chain.data}
             className="h-8 px-2 panel2 hover:border-line2 text-12 text-fg-muted hover:text-fg flex items-center gap-1.5"
           >
@@ -98,7 +121,7 @@ export function AuditLogView() {
           </button>
           <button
             type="button"
-            onClick={() => exportRows("jsonl")}
+            onClick={() => void exportRows("jsonl")}
             disabled={!chain.data}
             className="h-8 px-2 panel2 hover:border-line2 text-12 text-fg-muted hover:text-fg flex items-center gap-1.5"
           >
