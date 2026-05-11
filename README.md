@@ -63,6 +63,61 @@ or in development pick a role under "Continue without OIDC".
 | `pnpm -F @ops/web db:seed`     | Truncate + reload the demo dataset (idempotent) |
 | `pnpm -F @ops/web db:studio`   | Open Drizzle Studio against the dev database |
 
+## Deploy to a single VPS
+
+Everything ships as containers. One `docker compose up` brings up Postgres, the
+Next.js web app, the realtime WS worker, and a one-shot migrator that applies
+pending Drizzle migrations before web boots.
+
+```bash
+# 1. Configure secrets (one-time, on the server)
+cp .env.example .env
+# Fill in at minimum:
+#   AUTH_SECRET           openssl rand -base64 32
+#   REALTIME_JWT_SECRET   openssl rand -base64 32
+#   SYNC_SECRET           openssl rand -base64 32
+#   AUTH_URL              public origin (e.g. https://ops.example.com)
+# Optional:
+#   AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET   Google OIDC sign-in
+#   PROXMOX_TOKEN / ANTHROPIC_API_KEY / GITHUB_TOKEN   per-connector secrets
+
+# 2. Build + boot
+docker compose up -d --build
+
+# 3. Load demo data (optional, idempotent)
+docker compose exec web pnpm db:seed
+```
+
+Compose brings services up in the right order via health-gated `depends_on`:
+`postgres` → `migrator` (runs, exits 0) → `web` → `realtime`. Migrations re-run
+on every restart (Drizzle's `__drizzle_migrations` table is the authority, so
+this is safe and idempotent).
+
+Operational basics:
+
+```bash
+docker compose ps                            # status + health
+docker compose logs -f web realtime          # tail logs
+docker compose exec web pnpm db:migrate      # re-run migrations explicitly
+docker compose exec web pnpm db:seed         # reset demo data
+docker compose pull && docker compose up -d --build   # update + redeploy
+```
+
+**Reverse proxy notes.** In production the browser talks to two ports —
+`:3000` for HTTP and `:4001` for the WS upgrade. Terminate TLS in front (Caddy,
+Nginx, Traefik) and proxy both. The relevant headers:
+
+- `Upgrade`, `Connection: upgrade` for `:4001`
+- Set `AUTH_URL` to the public HTTPS origin so Auth.js issues correct callbacks
+- Set `NEXT_PUBLIC_REALTIME_URL` to `wss://your-domain/ws` (or wherever you
+  expose the WS port)
+
+**Image layout.** A single `apps/web/Dockerfile` produces the image that runs
+both the `web` long-running service and the `migrator` one-shot — the latter
+just invokes `pnpm db:migrate` instead of `pnpm start`. `apps/realtime` has its
+own image. Both bake pnpm into the layer so containers start without a corepack
+download.
+
 ## Design language
 
 Tokens are lifted from `Reference_Folder/Ops Dashboard.html` into

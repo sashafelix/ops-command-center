@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 // Routes that don't go through the session-cookie auth. /api/ingest/*
 // authenticates with Bearer API tokens at the handler level; /api/sync/*
 // authenticates with the shared SYNC_SECRET header (called by apps/realtime).
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/ingest", "/api/sync"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/ingest", "/api/sync", "/api/health"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;

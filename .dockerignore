@@ -1,0 +1,53 @@
+# =============================================================================
+# .dockerignore — keep the build context small + force a clean install
+# =============================================================================
+# Everything node_modules / build-output related must come from the deps and
+# builder stages, not the host. Otherwise a stale Windows-built node_modules
+# can poison the Linux container (postgres bindings, esbuild platform bins…).
+
+# --- dependencies, build output, caches ---
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/.cache
+**/.pnpm-store
+
+# --- VCS, IDEs, OS ---
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
+
+# --- env files (NEVER bake secrets into the image) ---
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# --- docker bits themselves ---
+compose.yaml
+docker-compose*.yaml
+**/Dockerfile
+**/.dockerignore
+
+# --- design assets / reference mocks not used at runtime ---
+Reference_Folder
+**/*.psd
+**/*.fig
+
+# --- logs / tmp ---
+**/*.log
+**/tmp
+**/.tmp
+
+# --- test artefacts ---
+**/test-results
+**/playwright-report
