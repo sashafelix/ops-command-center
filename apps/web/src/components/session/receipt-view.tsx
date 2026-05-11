@@ -2,10 +2,10 @@
 
 import { trpc } from "@/lib/trpc/client";
 import { StatusDot } from "@/components/status-dot";
-import { Cpu, GitBranch, Clock, DollarSign, Terminal, Hash, Copy, ExternalLink } from "lucide-react";
+import { Cpu, GitBranch, Clock, DollarSign, Terminal, Hash, Copy, ExternalLink, X } from "lucide-react";
 import { fmtDur, fmtUSD } from "@/lib/utils";
 
-export function ReceiptView({ id }: { id: string }) {
+export function ReceiptView({ id, onClose }: { id: string; onClose?: () => void }) {
   const q = trpc.sessions.detail.useQuery({ id });
 
   if (q.isLoading) {
@@ -53,6 +53,17 @@ export function ReceiptView({ id }: { id: string }) {
             <a href={`/sessions/${r.id}`} className="h-8 px-2 panel2 hover:border-line2 text-12 text-fg-muted hover:text-fg flex items-center gap-1.5">
               <ExternalLink size={12} aria-hidden /> Full page
             </a>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close session"
+                title="Esc"
+                className="h-8 w-8 panel2 hover:border-line2 text-fg-muted hover:text-fg flex items-center justify-center"
+              >
+                <X size={14} aria-hidden />
+              </button>
+            )}
           </div>
         </div>
 
