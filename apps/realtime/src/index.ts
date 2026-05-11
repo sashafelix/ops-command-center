@@ -6,6 +6,7 @@ import { verifyUpgradeToken } from "./auth";
 import { TopicHub, type Subscriber } from "./topics";
 import { nextNowPlayingTick } from "./mock-source";
 import { startPgListener } from "./pg-listen";
+import { startSyncTick } from "./sync-tick";
 
 const HOST = process.env.REALTIME_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.REALTIME_PORT ?? 4001);
@@ -101,3 +102,6 @@ server.listen(PORT, HOST, () => {
 void startPgListener(hub).catch((err: unknown) => {
   console.error("[realtime] pg listener failed", err);
 });
+
+// Periodic connector sync (Proxmox → Infra, etc.). Skips if SYNC_SECRET unset.
+startSyncTick();

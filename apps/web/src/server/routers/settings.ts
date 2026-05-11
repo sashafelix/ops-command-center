@@ -7,6 +7,8 @@ import { db, schema } from "@/db/client";
 import { appendAuditEvent } from "../audit-append";
 import { requireFreshAuth } from "../reauth";
 import { mintApiToken, VALID_SCOPES, type Scope } from "../api-tokens";
+import { connectorFor } from "../connectors/registry";
+import type { Connection } from "@/server/mock/seed";
 
 export const settingsRouter = router({
   overview: protectedProcedure.query(async () => {
@@ -350,6 +352,60 @@ export const settingsRouter = router({
         target: `webhook/${input.id}`,
       });
       return { ok: true };
+    }),
+
+  // ===========================================================================
+  // Connections — test reachability against the real source
+  // ===========================================================================
+
+  testConnection: adminProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const [row] = await db
+        .select()
+        .from(schema.connections)
+        .where(eq(schema.connections.id, input.id));
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const connector = connectorFor(input.id);
+      if (!connector) {
+        return { ok: false, detail: "no connector implemented for this connection (stub-only)" } as const;
+      }
+
+      // Shape the DB row into the Connection type the connector expects
+      const conn: Connection = {
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        status: row.status as Connection["status"],
+        detail: row.detail,
+        fields: row.fields,
+        last_sync: row.last_sync,
+        health: row.health,
+      };
+
+      const result = await connector.test(conn);
+
+      await db
+        .update(schema.connections)
+        .set({
+          health: result.ok ? "ok" : "bad",
+          status: result.ok ? "connected" : "needs-attention",
+          detail: result.ok ? result.detail : `error · ${result.reason}`,
+          last_sync: result.ok ? "just now" : row.last_sync,
+        })
+        .where(eq(schema.connections.id, input.id));
+
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: result.ok ? "connection.test.ok" : "connection.test.fail",
+        target: `connection/${input.id}`,
+      });
+
+      if (result.ok) return { ok: true as const, detail: result.detail };
+      return { ok: false as const, detail: result.reason };
     }),
 
   /** Admin-only — destructive workspace config touches secrets. */
