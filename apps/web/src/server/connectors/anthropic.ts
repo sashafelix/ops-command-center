@@ -7,6 +7,15 @@ const ANTHROPIC_VERSION = "2023-06-01";
 
 export const anthropicConnector: Connector = {
   id: "anthropic",
+  name: "Anthropic API",
+  category: "Model providers",
+  requiredFieldKeys: ["api_key"],
+  defaultFields() {
+    return [
+      { k: "base_url", label: "Base URL", type: "url", value: DEFAULT_BASE_URL },
+      { k: "api_key", label: "API key", type: "secret", value: "env:ANTHROPIC_API_KEY" },
+    ];
+  },
   async test(c: Connection): Promise<ConnectorTest> {
     const baseUrl = fieldValue(c, "base_url") ?? DEFAULT_BASE_URL;
     const keyRef = fieldValue(c, "api_key");

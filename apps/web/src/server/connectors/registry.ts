@@ -16,3 +16,8 @@ export const CONNECTORS: Readonly<Record<string, Connector>> = {
 export function connectorFor(id: string): Connector | undefined {
   return CONNECTORS[id];
 }
+
+/** All connector types operators can add a new instance of from the UI. */
+export function listConnectorTypes(): Connector[] {
+  return Object.values(CONNECTORS);
+}
