@@ -355,8 +355,63 @@ export const settingsRouter = router({
     }),
 
   // ===========================================================================
-  // Connections — test reachability against the real source
+  // Connections — edit field values + test reachability
   // ===========================================================================
+
+  /**
+   * Update the editable values on a connection (host, token, env: refs, …).
+   * The client only sends `{k, value}` pairs; we preserve the field shape
+   * (label, type) from the existing row so the connector spec stays
+   * authoritative. Admin-only, fresh-auth-gated, audit-logged.
+   *
+   * We deliberately do NOT include field values in the audit row — secrets
+   * (or env-var references) are not the kind of thing we want in audit logs.
+   * The "what changed" detail is the connection id; pair it with the
+   * connection.test events that follow to read the story.
+   */
+  saveConnection: adminProcedure
+    .input(
+      z.object({
+        id: z.string().min(1).max(60),
+        values: z
+          .array(
+            z.object({
+              k: z.string().min(1).max(60),
+              value: z.string().max(8192),
+            }),
+          )
+          .min(0)
+          .max(40),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const [row] = await db
+        .select()
+        .from(schema.connections)
+        .where(eq(schema.connections.id, input.id));
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const byK = new Map(input.values.map((v) => [v.k, v.value]));
+      const fields = row.fields.map((f) => ({
+        ...f,
+        value: byK.has(f.k) ? byK.get(f.k)! : f.value,
+      }));
+
+      await db
+        .update(schema.connections)
+        .set({ fields })
+        .where(eq(schema.connections.id, input.id));
+
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "connection.update",
+        target: `connection/${input.id}`,
+      });
+
+      return { ok: true as const };
+    }),
 
   testConnection: adminProcedure
     .input(z.object({ id: z.string() }))
