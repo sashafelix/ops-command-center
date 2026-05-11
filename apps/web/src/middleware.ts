@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth"];
+// Routes that don't go through the session-cookie auth. /api/ingest/*
+// authenticates with Bearer API tokens at the handler level.
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/ingest"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
