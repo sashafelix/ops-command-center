@@ -8,19 +8,13 @@ import { NowPlaying } from "./now-playing";
 import { RuntimeBanner } from "./runtime-banner";
 import { suppressNowPlaying } from "./nav-config";
 
-export function ChromeShell({
-  initials,
-  children,
-}: {
-  initials: string;
-  children: ReactNode;
-}) {
+export function ChromeShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const showNowPlaying = !suppressNowPlaying(pathname);
 
   return (
     <div className="min-w-[1280px]">
-      <TopBar initials={initials} />
+      <TopBar />
       <RuntimeBanner />
       <div className="flex">
         <Sidebar />

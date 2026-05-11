@@ -1,21 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronsLeft, ChevronsRight } from "lucide-react";
 import { NAV_GROUPS, type NavItem } from "./nav-config";
 import { lsGet, lsSet, StorageKeys } from "@/lib/storage";
 import { trpc } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 
+/**
+ * Map a destination id to the tRPC procedure most likely to be needed when
+ * its page mounts. Hovering / focusing the link kicks off both a Next.js
+ * route prefetch and a tRPC cache warm so the click feels instant.
+ */
+type Utils = ReturnType<typeof trpc.useUtils>;
+type Prefetch = (utils: Utils) => Promise<unknown> | unknown;
+const PREFETCH_BY_DESTINATION: Record<string, Prefetch> = {
+  live: (u) => Promise.all([u.live.kpi.prefetch(), u.sessions.liveBoard.prefetch()]),
+  sessions: (u) => u.sessions.list.prefetch(),
+  approvals: (u) => u.approvals.inbox.prefetch(),
+  infra: (u) => u.infra.overview.prefetch(),
+  "status-page": (u) => u.statusPage.overview.prefetch({ mode: "internal" }),
+  agents: (u) => u.agents.overview.prefetch(),
+  evals: (u) => u.evals.overview.prefetch(),
+  budgets: (u) => u.budgets.overview.prefetch(),
+  trust: (u) => u.trust.overview.prefetch(),
+  "audit-log": (u) => Promise.all([u.auditLog.kpi.prefetch(), u.auditLog.list.prefetch()]),
+  reports: (u) => u.reports.overview.prefetch(),
+  settings: (u) => u.settings.overview.prefetch(),
+};
+
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(() => lsGet(StorageKeys.sidebarCollapsed, false));
   const pathname = usePathname();
+  const router = useRouter();
+  const utils = trpc.useUtils();
   const badgesQuery = trpc.live.navBadges.useQuery(undefined, { staleTime: 60_000 });
   const badges: Record<string, number> = badgesQuery.data ?? {};
 
   useEffect(() => lsSet(StorageKeys.sidebarCollapsed, collapsed), [collapsed]);
+
+  // Single hover-warmer used by every item — kicks off router + tRPC prefetches.
+  const prefetch = useCallback(
+    (item: NavItem) => {
+      router.prefetch(item.href);
+      const fn = PREFETCH_BY_DESTINATION[item.id];
+      if (fn) void Promise.resolve(fn(utils)).catch(() => undefined);
+    },
+    [router, utils],
+  );
 
   return (
     <aside
@@ -43,6 +77,7 @@ export function Sidebar() {
                 collapsed={collapsed}
                 active={isActive(pathname, item.href)}
                 badge={badges[item.id] ?? 0}
+                onPrefetch={prefetch}
               />
             ))}
           </div>
@@ -68,13 +103,19 @@ function SidebarItem({
   collapsed,
   active,
   badge,
+  onPrefetch,
 }: {
   item: NavItem;
   collapsed: boolean;
   active: boolean;
   badge: number;
+  onPrefetch: (item: NavItem) => void;
 }) {
   const Icon = item.icon;
+  const warmHandlers = {
+    onMouseEnter: () => onPrefetch(item),
+    onFocus: () => onPrefetch(item),
+  };
   if (collapsed) {
     return (
       <Link
@@ -82,6 +123,7 @@ function SidebarItem({
         title={item.label}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
+        {...warmHandlers}
         className={cn(
           "relative w-10 h-10 mx-auto flex items-center justify-center rounded",
           active ? "bg-[var(--hover)] text-fg" : "text-fg-dim hover:text-fg hover:bg-[var(--hover-soft)]",
@@ -101,6 +143,7 @@ function SidebarItem({
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      {...warmHandlers}
       className={cn(
         "group relative h-8 px-2 rounded flex items-center gap-2 text-12",
         active ? "bg-[var(--hover)] text-fg" : "text-fg-muted hover:text-fg hover:bg-[var(--hover-soft)]",
