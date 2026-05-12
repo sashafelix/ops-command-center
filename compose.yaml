@@ -105,6 +105,10 @@ services:
       REALTIME_PORT: "4001"
       REALTIME_JWT_SECRET: "${REALTIME_JWT_SECRET:?REALTIME_JWT_SECRET must be set}"
       SYNC_SECRET: "${SYNC_SECRET:?SYNC_SECRET must be set}"
+      # Optional — webhook deliveries are signed with HMAC-SHA256 over the
+      # body and sent in the x-ops-signature header. Receivers verify with
+      # the same secret. If unset, deliveries are sent unsigned.
+      WEBHOOK_SECRET: "${WEBHOOK_SECRET:-}"
       # Service-DNS URL the realtime worker uses to call /api/sync/* on web.
       SYNC_WEB_URL: http://web:3000
     ports:

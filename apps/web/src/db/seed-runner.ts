@@ -61,7 +61,7 @@ async function main() {
       eval_regressions, eval_suites, eval_ab,
       budget_breaches, budgets, budget_meta,
       ad_hoc_reports, scheduled_reports, compliance_bundles,
-      webhooks, tokens, members, connections, prefs, workspace,
+      webhook_deliveries, webhooks, tokens, members, connections, prefs, workspace,
       runtime, reauth_markers, kv_meta, policies, notifications
       RESTART IDENTITY`);
 

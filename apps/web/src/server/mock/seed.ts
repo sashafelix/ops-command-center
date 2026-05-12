@@ -1116,9 +1116,13 @@ export const seed: Seed = {
       { id: "tok_eval",   name: "eval-bot",        scope: "evals.run, sessions.read",         created_at: "Jan 11", last_used: "31 min ago", expires_at: "Jul 11" },
     ],
     webhooks: [
-      { id: "wh_slack",  url: "https://hooks.slack.com/…/B07K…",        events: ["session.failed", "approval.denied"],          status: "ok",   delivery_stats: "18,321 · 99.97%" },
-      { id: "wh_pd",     url: "https://events.pagerduty.com/v2/enqueue", events: ["incident.opened"],                             status: "ok",   delivery_stats: "412 · 100.0%" },
-      { id: "wh_audit",  url: "https://audit-archive.internal/ingest",   events: ["audit.row"],                                    status: "warn", delivery_stats: "1.4M · 99.71%" },
+      // Seed entries subscribe only to events that actually emit today.
+      // delivery_stats is intentionally empty — the router computes it on
+      // read from webhook_deliveries, so showing a fake count here would
+      // contradict the "honest state" rule.
+      { id: "wh_slack", url: "https://hooks.slack.com/…/B07K…",         events: ["approval.deny", "connection.test.fail", "runtime.pause-all"], status: "warn", delivery_stats: "" },
+      { id: "wh_pd",    url: "https://events.pagerduty.com/v2/enqueue", events: ["connection.test.fail", "runtime.pause-all"],                  status: "warn", delivery_stats: "" },
+      { id: "wh_audit", url: "https://audit-archive.internal/ingest",   events: ["audit.row"],                                                   status: "warn", delivery_stats: "" },
     ],
     prefs: {
       retention: "90 days",
