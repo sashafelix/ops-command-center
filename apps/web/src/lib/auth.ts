@@ -36,6 +36,25 @@ const VALID_ROLES: Role[] = ["viewer", "analyst", "sre", "admin"];
 
 const IS_DEV = process.env.NODE_ENV === "development";
 
+/**
+ * Explicit prod-time escape hatch that re-enables the dev credentials
+ * bypass on a NODE_ENV=production build. Intended for single-operator,
+ * self-hosted deploys behind a VPN / Tailscale / local network only —
+ * anyone who can reach /login becomes admin.
+ *
+ * The runtime banner + login-page hint make it obvious when this is on
+ * so it can't quietly ship to a public deployment.
+ */
+const ALLOW_BYPASS = process.env.ALLOW_DEV_BYPASS === "1";
+const BYPASS_ENABLED = IS_DEV || ALLOW_BYPASS;
+
+if (ALLOW_BYPASS && !IS_DEV) {
+  console.warn(
+    "[auth] ALLOW_DEV_BYPASS=1 — credentials bypass is enabled on a production build. " +
+      "Anyone reachable can sign in as any role. Disable before exposing publicly.",
+  );
+}
+
 const providers: Provider[] = [
   Google({
     clientId: process.env.AUTH_GOOGLE_ID ?? "",
@@ -48,11 +67,12 @@ const providers: Provider[] = [
   }),
 ];
 
-if (IS_DEV) {
-  // Dev-only bypass — never registered outside development. Lets a local
-  // operator sign in as any role for RBAC poking without standing up an
-  // OIDC client. Triple-gated: NODE_ENV check at module init, NODE_ENV
-  // check inside authorize(), and the dev login form only renders in dev.
+if (BYPASS_ENABLED) {
+  // Credentials bypass. Registered when either:
+  //   - NODE_ENV=development (always), or
+  //   - ALLOW_DEV_BYPASS=1 on a production build (explicit operator opt-in)
+  // The authorize() callback re-checks the same gate to refuse stale-config
+  // requests sent after the env var was cleared.
   providers.push(
     Credentials({
       id: "dev-bypass",
@@ -61,7 +81,9 @@ if (IS_DEV) {
         role: { label: "Role", type: "text" },
       },
       authorize(input) {
-        if (process.env.NODE_ENV !== "development") return null;
+        const stillAllowed =
+          process.env.NODE_ENV === "development" || process.env.ALLOW_DEV_BYPASS === "1";
+        if (!stillAllowed) return null;
         const raw = typeof input?.role === "string" ? input.role : "viewer";
         const role: Role = (VALID_ROLES as string[]).includes(raw)
           ? (raw as Role)

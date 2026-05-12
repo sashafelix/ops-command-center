@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ChromeShell } from "@/components/shell/chrome-shell";
+import { BypassBanner } from "@/components/shell/bypass-banner";
 
 /**
  * Chrome layout — no longer marked `force-dynamic`. The middleware already
@@ -17,9 +18,12 @@ export default function ShellLayout({
   overlay: ReactNode;
 }) {
   return (
-    <ChromeShell>
-      {children}
-      {overlay}
-    </ChromeShell>
+    <>
+      <BypassBanner />
+      <ChromeShell>
+        {children}
+        {overlay}
+      </ChromeShell>
+    </>
   );
 }

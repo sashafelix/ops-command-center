@@ -63,6 +63,48 @@ or in development pick a role under "Continue without OIDC".
 | `pnpm -F @ops/web db:seed`     | Truncate + reload the demo dataset (idempotent) |
 | `pnpm -F @ops/web db:studio`   | Open Drizzle Studio against the dev database |
 
+## Sign-in
+
+In production builds (`NODE_ENV=production`), the dev credentials bypass is
+unregistered and Google OIDC is the only way in. Two paths to make `/login`
+work:
+
+### Quick path — `ALLOW_DEV_BYPASS=1` (single-operator, local/VPN only)
+
+Re-enables the credentials bypass on a production build. Lets you sign in as
+any role without setting up OIDC. **Only safe when access is restricted**
+(local network, Tailscale, VPN) — anyone who can reach the URL becomes admin.
+
+```bash
+# in .env
+ALLOW_DEV_BYPASS=1
+```
+
+`docker compose up -d web` and `/login` will show the role picker. A loud
+yellow banner stays pinned to the top of every page so you don't forget
+it's on.
+
+### Proper path — Google OIDC
+
+1. Go to <https://console.cloud.google.com/apis/credentials>. Create a project
+   if you haven't already.
+2. **OAuth consent screen** → User type **External** → fill the basics. While
+   the app is unpublished, only listed **Test users** can sign in.
+3. **Credentials** → **Create credentials** → **OAuth client ID** → Web app.
+4. Add the callback URL under **Authorized redirect URIs**:
+   - Local: `http://localhost:3000/api/auth/callback/google`
+   - VPS:   `https://your-domain/api/auth/callback/google`
+5. Copy the Client ID + secret into `.env`:
+   ```bash
+   AUTH_GOOGLE_ID=<client-id>
+   AUTH_GOOGLE_SECRET=<client-secret>
+   ALLOW_DEV_BYPASS=         # blank — turn the bypass off
+   ```
+6. `docker compose up -d web`.
+
+New Google sign-ins land as `viewer`. Promote yourself by editing the
+`members` table directly (until the role-management UI lands).
+
 ## Deploy to a single VPS
 
 Everything ships as containers. One `docker compose up` brings up Postgres, the
