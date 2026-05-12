@@ -1,7 +1,11 @@
-import { eq, desc } from "drizzle-orm";
-import { protectedProcedure, router } from "../trpc";
+import { and, desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { protectedProcedure, sreProcedure, adminProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
 import { kvGet } from "@/db/kv";
+import { requireFreshAuth } from "../reauth";
+import { appendAuditEvent } from "../audit-append";
 
 type InfraKpi = { uptime: string; mttr: string; openIncidents: number; slosBreached: number };
 
@@ -72,6 +76,9 @@ export const infraRouter = router({
         age: ageString(i.started_at),
         assignee: i.assignee,
         status: i.status,
+        ack_at: i.ack_at?.toISOString() ?? null,
+        acked_by: i.acked_by ?? null,
+        resolved_at: i.resolved_at?.toISOString() ?? null,
       })),
       deploys: deploys.map((d) => ({
         id: d.id,
@@ -79,7 +86,8 @@ export const infraRouter = router({
         service: d.service_or_agent_id,
         who: d.who,
         when: ageString(d.when),
-        status: tone(d.status),
+        status: deployTone(d.status),
+        raw_status: d.status,
         rollback_candidate: d.rollback_candidate,
       })),
       slos: slos.map((s) => ({
@@ -92,6 +100,133 @@ export const infraRouter = router({
       })),
     };
   }),
+
+  /**
+   * Acknowledge an incident. Records who + when, flips status to
+   * "monitoring" so the surface shows it's being worked. Idempotent —
+   * a second ack just refreshes the acked_by/ack_at fields.
+   */
+  ackIncident: sreProcedure
+    .input(z.object({ id: z.string().min(1).max(120) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const actor = ctx.session.user.email ?? "unknown";
+      const updated = await db
+        .update(schema.incidents)
+        .set({
+          ack_at: new Date(),
+          acked_by: actor,
+          status: "monitoring",
+          assignee: actor,
+        })
+        .where(eq(schema.incidents.id, input.id))
+        .returning({ id: schema.incidents.id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor,
+        role: "admin",
+        action: "incident.ack",
+        target: `incident/${input.id}`,
+      });
+      return { id: input.id, ack_at: new Date().toISOString(), acked_by: actor };
+    }),
+
+  /** Mark an incident resolved. Records when. status flips to resolved. */
+  resolveIncident: sreProcedure
+    .input(z.object({ id: z.string().min(1).max(120) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const updated = await db
+        .update(schema.incidents)
+        .set({
+          resolved_at: new Date(),
+          status: "resolved",
+        })
+        .where(eq(schema.incidents.id, input.id))
+        .returning({ id: schema.incidents.id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "incident.resolve",
+        target: `incident/${input.id}`,
+      });
+      return { id: input.id };
+    }),
+
+  /**
+   * Roll back a service deploy. Refuses if the deploy isn't flagged as
+   * rollback_candidate (operator misclicks shouldn't be able to roll back
+   * anything they want — flag is set during deploy from upstream signals).
+   * Refuses if already rolled back.
+   */
+  rollbackDeploy: sreProcedure
+    .input(z.object({ deploy_id: z.string().min(1).max(120) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const [dep] = await db
+        .select()
+        .from(schema.deploys)
+        .where(
+          and(
+            eq(schema.deploys.id, input.deploy_id),
+            eq(schema.deploys.target_kind, "service"),
+          ),
+        );
+      if (!dep) throw new TRPCError({ code: "NOT_FOUND" });
+      if (!dep.rollback_candidate) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "deploy is not flagged as a rollback candidate",
+        });
+      }
+      if (dep.status === "rolled-back") {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "deploy is already rolled back",
+        });
+      }
+      await db
+        .update(schema.deploys)
+        .set({ status: "rolled-back" })
+        .where(eq(schema.deploys.id, input.deploy_id));
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "deploy.rollback",
+        target: `deploy/${dep.id}`,
+      });
+      return { id: dep.id, status: "rolled-back" as const };
+    }),
+
+  /**
+   * Set a region's traffic_pct. 0 drains the region, 1 restores full.
+   * Admin only — this is load-shifting on real infra, not an SRE-level
+   * call.
+   */
+  setRegionTraffic: adminProcedure
+    .input(
+      z.object({
+        id: z.string().min(1).max(120),
+        traffic_pct: z.number().min(0).max(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const updated = await db
+        .update(schema.regions)
+        .set({ traffic_pct: input.traffic_pct })
+        .where(eq(schema.regions.id, input.id))
+        .returning({ id: schema.regions.id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: input.traffic_pct === 0 ? "region.drain" : "region.restore",
+        target: `region/${input.id}`,
+      });
+      return { id: input.id, traffic_pct: input.traffic_pct };
+    }),
 });
 
 /** services / regions / slos only ever surface ok | warn | bad in v1. */
@@ -110,7 +245,7 @@ function ageString(then: Date): string {
   return `${Math.floor(h / 24)} d ago`;
 }
 
-function tone(s: "rolled-out" | "rolling" | "rolled-back"): "ok" | "warn" | "bad" {
+function deployTone(s: "rolled-out" | "rolling" | "rolled-back"): "ok" | "warn" | "bad" {
   if (s === "rolled-back") return "bad";
   if (s === "rolling") return "warn";
   return "ok";
