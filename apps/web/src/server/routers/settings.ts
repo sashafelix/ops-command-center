@@ -69,8 +69,8 @@ export const settingsRouter = router({
           last_test_at: c.last_test_at?.toISOString() ?? null,
           last_test_detail: c.last_test_detail ?? null,
           last_test_ok: c.last_test_ok ?? null,
-          /** Whether a connector implementation exists (Test button enabled). */
-          has_connector: connectorFor(c.id) !== undefined,
+          /** Whether a real connector implementation exists (Test button enabled). */
+          has_connector: connectorFor(c.id)?.implemented === true,
         };
       }),
       members: members.map((m) => ({
@@ -673,8 +673,11 @@ export const settingsRouter = router({
       if (!row) throw new TRPCError({ code: "NOT_FOUND" });
 
       const connector = connectorFor(input.id);
-      if (!connector) {
-        return { ok: false, detail: "no connector implemented for this connection (stub-only)" } as const;
+      if (!connector || !connector.implemented) {
+        return {
+          ok: false,
+          detail: "no connector implemented for this connection (stub-only)",
+        } as const;
       }
 
       const conn: Connection = {
@@ -733,6 +736,7 @@ export const settingsRouter = router({
       id: c.id,
       name: c.name,
       category: c.category,
+      implemented: c.implemented,
     }));
   }),
 

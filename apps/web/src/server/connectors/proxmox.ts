@@ -50,6 +50,7 @@ export const proxmoxConnector: Connector = {
   name: "Proxmox VE",
   category: "Infrastructure",
   requiredFieldKeys: ["host", "token_id", "token"],
+  implemented: true,
   defaultFields() {
     return [
       { k: "host", label: "Host", type: "url", value: "" },

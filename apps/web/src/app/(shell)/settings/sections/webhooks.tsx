@@ -8,27 +8,11 @@ import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { StatusDot } from "@/components/status-dot";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { cn } from "@/lib/utils";
+import { NOTIFICATION_EVENTS } from "@/lib/notification-events";
 
 type WebhookView = RouterOutputs["settings"]["overview"]["webhooks"][number];
 
-// Real audit actions emitted by the codebase today, plus the audit.row
-// wildcard for "everything." Anything not in this list either doesn't
-// emit yet (no event source) or is too noisy to surface here.
-const EVENT_OPTIONS = [
-  "audit.row", //              catch-all: every audit event
-  "approval.approve",
-  "approval.deny",
-  "agent.rollback",
-  "evals.run",
-  "connection.test.fail",
-  "connection.test.ok",
-  "connection.create",
-  "connection.delete",
-  "token.create",
-  "token.revoke",
-  "member.invite",
-  "runtime.pause-all", //      kill switch fired
-] as const;
+const EVENT_OPTIONS = NOTIFICATION_EVENTS;
 
 export function WebhooksSection({ items }: { items: WebhookView[] }) {
   const utils = trpc.useUtils();

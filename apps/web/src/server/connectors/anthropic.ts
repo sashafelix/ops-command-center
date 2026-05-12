@@ -10,6 +10,7 @@ export const anthropicConnector: Connector = {
   name: "Anthropic API",
   category: "Model providers",
   requiredFieldKeys: ["api_key"],
+  implemented: true,
   defaultFields() {
     return [
       { k: "base_url", label: "Base URL", type: "url", value: DEFAULT_BASE_URL },

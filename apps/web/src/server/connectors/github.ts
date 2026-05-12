@@ -9,6 +9,7 @@ export const githubConnector: Connector = {
   name: "GitHub",
   category: "Repos",
   requiredFieldKeys: ["token"],
+  implemented: true,
   defaultFields() {
     return [
       { k: "host", label: "Host", type: "url", value: "https://github.com" },

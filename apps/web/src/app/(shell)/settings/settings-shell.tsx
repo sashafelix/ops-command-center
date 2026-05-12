@@ -83,7 +83,9 @@ export function SettingsShell({
           {section === "webhooks" && <WebhooksSection items={data.webhooks} />}
           {section === "tokens" && <TokensSection items={data.tokens} />}
           {section === "members" && <MembersSection items={data.members} />}
-          {section === "notifications" && <NotificationsSection items={data.connections} />}
+          {section === "notifications" && (
+            <NotificationsSection connections={data.connections} webhooks={data.webhooks} />
+          )}
           {section === "prefs" && <PrefsSection prefs={data.prefs} />}
           {section === "audit" && <AuditSection />}
           {section === "about" && (

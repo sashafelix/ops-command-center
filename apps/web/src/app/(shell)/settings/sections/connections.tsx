@@ -449,12 +449,13 @@ function NewConnectionDialog({ onClose }: { onClose: () => void }) {
         <header className="mb-3 pr-8">
           <h3 className="text-13 font-semibold text-fg">New connection</h3>
           <p className="text-11 text-fg-muted mt-1">
-            Pick a connector type. Only types with an implementation are listed; stubs aren&apos;t useful to add yet.
+            Pick a connector type. Stub types are configurable but can&apos;t be tested
+            until a connector implementation lands.
           </p>
         </header>
 
         <label className="block text-11 text-fg-muted mb-1">Connector type</label>
-        <div className="flex flex-col gap-1 mb-3">
+        <div className="flex flex-col gap-1 mb-3 max-h-72 overflow-y-auto">
           {types.data?.map((t) => (
             <label
               key={t.id}
@@ -472,7 +473,12 @@ function NewConnectionDialog({ onClose }: { onClose: () => void }) {
               />
               <span className="font-mono text-fg-muted">{t.id}</span>
               <span className="text-fg-muted">·</span>
-              <span className="text-fg-muted">{t.name}</span>
+              <span className="text-fg-muted truncate">{t.name}</span>
+              {!t.implemented && (
+                <span className="text-11 text-fg-faint italic" title="No connector implementation yet — Test will be unavailable">
+                  no test
+                </span>
+              )}
               <span className="ml-auto chip">{t.category}</span>
             </label>
           ))}
