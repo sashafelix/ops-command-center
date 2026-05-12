@@ -160,6 +160,69 @@ just invokes `pnpm db:migrate` instead of `pnpm start`. `apps/realtime` has its
 own image. Both bake pnpm into the layer so containers start without a corepack
 download.
 
+## Pushing data from an agent
+
+Real agents feed Ops Command Center through token-authed POST endpoints under
+`/api/ingest/*` (`session/{start,update,end}`, `tool-call`, `approval`).
+There's a TypeScript SDK and a demo runner that exercises the full lifecycle.
+
+### 1. Mint a token
+
+Sign in to the dashboard → **Settings → Tokens → New API token**. Pick the
+scopes the agent needs:
+
+| Action | Scope |
+|---|---|
+| Start / update / end sessions | `sessions.write` |
+| Push tool calls | `tool-calls.write` |
+| Request approvals | `approvals.write` |
+
+The raw secret (`ops_live_…`) is shown once on creation — copy it then.
+
+### 2. Use `@ops/agent-client`
+
+```ts
+import { createAgent } from "@ops/agent-client";
+
+const agent = createAgent({
+  baseUrl: "http://localhost:3000",
+  token: process.env.OPS_TOKEN!,
+  agent_version: "claude-code/1.2.3",
+  model: "sonnet-4.5",
+  operator: "you@example.com",
+});
+
+const session = await agent.startSession({
+  repo: "github.com/me/repo",
+  goal: "Fix the auth middleware bug",
+});
+
+await session.toolCall({ kind: "bash", name: "grep -r ..." });
+await session.toolCall({ kind: "edit_file", name: "auth.ts:42" });
+await session.update({ tokens_in: 12_000, tokens_out: 4_200 });
+await session.end({ outcome: "success" });
+```
+
+The SDK auto-tracks tool-call offsets and runtime from `startSession`. It
+ships as a workspace package; for external agents copy
+`packages/agent-client/src/index.ts` — it has no internal deps beyond Node
+20 stdlib.
+
+### 3. Try the demo
+
+A simulated Claude Code-style agent ships under `examples/demo-agent`.
+Runs sessions in pairs on a loop, fires realistic tool-call traffic,
+hits real endpoints:
+
+```bash
+export OPS_BASE_URL=http://localhost:3000
+export OPS_TOKEN=ops_live_paste-your-token-here
+pnpm -F @ops/demo-agent start
+```
+
+Within seconds you'll see new sessions on **Live**, NOW PLAYING flips
+to a real running session, and Sessions / Audit log fill in for real.
+
 ## Design language
 
 Tokens are lifted from `Reference_Folder/Ops Dashboard.html` into
