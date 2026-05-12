@@ -550,23 +550,11 @@ async function main() {
 
     // ----- KV meta (the per-surface KPI blobs) -----
     type KvSeed = { key: string; data: unknown };
+    // live.kpi / live.now_playing / live.board / sessions.table are computed
+    // from the sessions table now (see routers/live.ts + routers/sessions.ts),
+    // so we no longer seed those KV blobs. sessions.receipt stays — the
+    // session detail page still falls back to it before hitting the row.
     const kvSeeds: KvSeed[] = [
-      { key: "live.kpi", data: MOCK.kpi },
-      { key: "live.now_playing", data: MOCK.nowPlaying },
-      {
-        key: "live.board",
-        data: {
-          counts: {
-            active: MOCK.active.length,
-            watching: MOCK.watching.length,
-            done1h: MOCK.done.length,
-          },
-          active: MOCK.active,
-          watching: MOCK.watching,
-          done: MOCK.done,
-        },
-      },
-      { key: "sessions.table", data: MOCK.sessionsTable },
       { key: "sessions.receipt", data: MOCK.receipt },
       { key: "approvals.counts", data: MOCK.approvals.counts },
       { key: "approvals.recent", data: MOCK.approvals.recent },
