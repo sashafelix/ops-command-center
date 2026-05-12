@@ -7,7 +7,7 @@ import { Sparkline } from "@/components/sparkline";
 import { StatusDot } from "@/components/status-dot";
 import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { fmtUSD, cn } from "@/lib/utils";
-import { RotateCcw, Key } from "lucide-react";
+import { RotateCcw, Key, Pause, Play, Loader2 } from "lucide-react";
 
 export function AgentsRegistry({ initial }: { initial: RouterOutputs["agents"]["overview"] }) {
   const utils = trpc.useUtils();
@@ -16,6 +16,18 @@ export function AgentsRegistry({ initial }: { initial: RouterOutputs["agents"]["
   const rollback = trpc.agents.rollback.useMutation({
     onSuccess: () => void utils.agents.overview.invalidate(),
   });
+  const setStatus = trpc.agents.setStatus.useMutation({
+    onSuccess: () => void utils.agents.overview.invalidate(),
+  });
+
+  async function handleToggle(agentId: string, current: string) {
+    const next = current === "paused" ? "active" : "paused";
+    const ok = await requireFreshAuth(
+      next === "paused" ? `Pause agent ${agentId}.` : `Resume agent ${agentId}.`,
+    );
+    if (!ok) return;
+    setStatus.mutate({ id: agentId, status: next });
+  }
 
   async function handleRollback(deployId: string, agent: string, fromV: string, toV: string) {
     const ok = await requireFreshAuth(`Confirm rollback of ${agent}: ${toV} → ${fromV}.`);
@@ -73,6 +85,7 @@ export function AgentsRegistry({ initial }: { initial: RouterOutputs["agents"]["
                 <th className="text-right px-3 py-2 font-normal w-16">P95</th>
                 <th className="text-left px-3 py-2 font-normal w-20">Signed</th>
                 <th className="px-3 py-2 font-normal w-24" />
+                <th className="px-3 py-2 font-normal w-20" />
               </tr>
             </thead>
             <tbody>
@@ -101,6 +114,24 @@ export function AgentsRegistry({ initial }: { initial: RouterOutputs["agents"]["
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Sparkline values={a.spark} tone={a.status === "paused" ? "warn" : "info"} width={64} height={18} />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => void handleToggle(a.id, a.status)}
+                      disabled={setStatus.isPending && setStatus.variables?.id === a.id}
+                      title={a.status === "paused" ? "Resume agent" : "Pause agent"}
+                      className="h-7 px-2 panel2 hover:border-line2 text-11 text-fg-muted hover:text-fg inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {setStatus.isPending && setStatus.variables?.id === a.id ? (
+                        <Loader2 size={11} className="animate-spin" aria-hidden />
+                      ) : a.status === "paused" ? (
+                        <Play size={11} aria-hidden />
+                      ) : (
+                        <Pause size={11} aria-hidden />
+                      )}
+                      {a.status === "paused" ? "Resume" : "Pause"}
+                    </button>
                   </td>
                 </tr>
               ))}

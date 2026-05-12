@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { eq, isNull, desc, sql } from "drizzle-orm";
+import { eq, isNull, desc, sql, and, gte, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
@@ -23,28 +23,48 @@ type ApprovalCounts = { pending: number; autoApproved24h: number; blocked24h: nu
 export const approvalsRouter = router({
   /** Inbox payload — pending queue + recent verdicts + policies + counts. */
   inbox: protectedProcedure.query(async () => {
-    const [queueRows, policyRows, recent, counts] = await Promise.all([
-      db
-        .select()
-        .from(schema.approvals)
-        .where(isNull(schema.approvals.decided_at))
-        .orderBy(desc(schema.approvals.requested_at)),
-      db.select().from(schema.policies).orderBy(schema.policies.name),
-      kvGet<RecentVerdict[]>("approvals.recent", []),
-      kvGet<ApprovalCounts>("approvals.counts", {
-        pending: 0,
-        autoApproved24h: 0,
-        blocked24h: 0,
-      }),
-    ]);
+    const since24h = sql`now() - interval '24 hours'`;
+    const [queueRows, policyRows, recent, pending, autoApproved24h, blocked24h] =
+      await Promise.all([
+        db
+          .select()
+          .from(schema.approvals)
+          .where(isNull(schema.approvals.decided_at))
+          .orderBy(desc(schema.approvals.requested_at)),
+        db.select().from(schema.policies).orderBy(schema.policies.name),
+        kvGet<RecentVerdict[]>("approvals.recent", []),
+        db
+          .select({ c: sql<number>`count(*)::int` })
+          .from(schema.approvals)
+          .where(isNull(schema.approvals.decided_at)),
+        // Auto-approved = decided without a human approver in the last 24h.
+        db
+          .select({ c: sql<number>`count(*)::int` })
+          .from(schema.approvals)
+          .where(
+            and(
+              eq(schema.approvals.decision, "approve"),
+              isNull(schema.approvals.approver_user_id),
+              gte(schema.approvals.decided_at, since24h),
+            ),
+          ),
+        // Blocked = denied or expired in the last 24h.
+        db
+          .select({ c: sql<number>`count(*)::int` })
+          .from(schema.approvals)
+          .where(
+            and(
+              inArray(schema.approvals.decision, ["deny", "expire"]),
+              gte(schema.approvals.decided_at, since24h),
+            ),
+          ),
+      ]);
 
-    // Pending count is authoritative from the row store; the kv mirror is a
-    // hint for the KPI strip while the page is loading.
-    const [pending] = await db
-      .select({ c: sql<number>`count(*)::int` })
-      .from(schema.approvals)
-      .where(isNull(schema.approvals.decided_at));
-    counts.pending = pending?.c ?? counts.pending;
+    const counts: ApprovalCounts = {
+      pending: pending[0]?.c ?? 0,
+      autoApproved24h: autoApproved24h[0]?.c ?? 0,
+      blocked24h: blocked24h[0]?.c ?? 0,
+    };
 
     return {
       counts,

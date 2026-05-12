@@ -1,7 +1,11 @@
-import { desc } from "drizzle-orm";
-import { protectedProcedure, router } from "../trpc";
+import { desc, eq } from "drizzle-orm";
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
 import { kvGet } from "@/db/kv";
+import { requireFreshAuth } from "../reauth";
+import { appendAuditEvent } from "../audit-append";
 
 type TrustKpi = {
   active_threats: number;
@@ -65,6 +69,31 @@ export const trustRouter = router({
       })),
     };
   }),
+
+  /** Move an investigation through its state machine. SRE+, re-auth, audit. */
+  setInvestigationStatus: sreProcedure
+    .input(
+      z.object({
+        id: z.string().min(1).max(120),
+        status: z.enum(["open", "triage", "closed"]),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const updated = await db
+        .update(schema.investigations)
+        .set({ status: input.status })
+        .where(eq(schema.investigations.id, input.id))
+        .returning({ id: schema.investigations.id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: `investigation.${input.status}`,
+        target: `investigation/${input.id}`,
+      });
+      return { id: input.id, status: input.status };
+    }),
 });
 
 function ageString(then: Date): string {

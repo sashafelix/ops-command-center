@@ -556,7 +556,7 @@ async function main() {
     // session detail page still falls back to it before hitting the row.
     const kvSeeds: KvSeed[] = [
       { key: "sessions.receipt", data: MOCK.receipt },
-      { key: "approvals.counts", data: MOCK.approvals.counts },
+      // approvals.counts removed — computed from the approvals table now
       { key: "approvals.recent", data: MOCK.approvals.recent },
       { key: "infra.kpi", data: MOCK.infra.kpi },
       { key: "trust.kpi", data: MOCK.trust.kpi },
