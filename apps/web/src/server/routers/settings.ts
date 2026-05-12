@@ -199,6 +199,99 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
+  /**
+   * Danger-zone action: reset every preference to its built-in default.
+   * UPSERTs the singleton row so a fresh install (no row) still gets defaults.
+   * Audit-logged as `prefs.reset` so anyone reviewing the chain can see the
+   * action separately from incremental `prefs.update` rows.
+   */
+  resetPreferences: adminProcedure.mutation(async ({ ctx }) => {
+    await requireFreshAuth(ctx);
+    const defaults = {
+      id: "default" as const,
+      retention: "90 days",
+      timezone: "UTC",
+      density: "compact" as const,
+      auto_refresh: true,
+      ambient_audio: false,
+      theme: "system" as const,
+      language: "en-US",
+      experimental: false,
+    };
+    await db
+      .insert(schema.prefs)
+      .values(defaults)
+      .onConflictDoUpdate({ target: schema.prefs.id, set: defaults });
+    await appendAuditEvent({
+      actor: ctx.session.user.email ?? "unknown",
+      role: "admin",
+      action: "prefs.reset",
+      target: "prefs/default",
+    });
+    return { ok: true as const };
+  }),
+
+  /**
+   * Danger-zone action: nuke every operational table — the same set the
+   * seed-runner truncates. Caller must type the current workspace_name as
+   * confirmation; server re-verifies (defense in depth — the UI is just
+   * friction, the server is the gate).
+   *
+   * Side effects:
+   *   - Audit chain restarts from empty (the audit row written by THIS
+   *     action becomes the new chain head with prev_hash="").
+   *   - All API tokens are revoked.
+   *   - The user's JWT session survives (cookies + JWT secret are unchanged),
+   *     so they can keep navigating an empty workspace and re-seed if they
+   *     want demo data back.
+   */
+  wipeWorkspace: adminProcedure
+    .input(z.object({ confirm_name: z.string().min(1).max(120) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const [ws] = await db
+        .select({ name: schema.workspace.workspace_name })
+        .from(schema.workspace)
+        .where(eq(schema.workspace.id, "default"));
+      if (!ws) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "no workspace to wipe" });
+      }
+      if (input.confirm_name.trim() !== ws.name) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `confirm_name must equal the workspace name ("${ws.name}")`,
+        });
+      }
+
+      // Truncate set mirrors db/seed-runner.ts. Keep it inside one TX so a
+      // partial wipe can't leave the workspace half-deleted.
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`TRUNCATE TABLE
+          audit_events, evidence_events, investigations, threat_buckets,
+          tool_calls, approvals, sessions,
+          service_load, slos, incidents, deploys, services, regions,
+          status_signals, status_incidents, status_page_meta,
+          signing_keys, agent_versions,
+          eval_regressions, eval_suites, eval_ab,
+          budget_breaches, budgets, budget_meta,
+          ad_hoc_reports, scheduled_reports, compliance_bundles,
+          webhook_deliveries, webhooks, tokens, members, connections, prefs, workspace,
+          runtime, reauth_markers, kv_meta, policies, notifications
+          RESTART IDENTITY`);
+      });
+
+      // appendAuditEvent runs AFTER the truncate, against the now-empty
+      // audit_events table — this becomes the first row of a fresh chain.
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "workspace.delete",
+        target: `workspace/${ws.name}`,
+      });
+
+      return { ok: true as const };
+    }),
+
   // ===========================================================================
   // Members
   // ===========================================================================
