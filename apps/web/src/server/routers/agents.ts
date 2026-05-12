@@ -1,23 +1,15 @@
 import { TRPCError } from "@trpc/server";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
-import { kvGet } from "@/db/kv";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
 
-type AgentsKpi = {
-  active: number;
-  paused: number;
-  total: number;
-  avg_trust: number;
-  deploys_24h: number;
-};
-
 export const agentsRouter = router({
   overview: protectedProcedure.query(async () => {
-    const [list, deploys, keys, kpi] = await Promise.all([
+    const since24h = sql`now() - interval '24 hours'`;
+    const [list, deploys, keys, deploys24h] = await Promise.all([
       db.select().from(schema.agent_versions).orderBy(schema.agent_versions.id),
       db
         .select()
@@ -25,13 +17,10 @@ export const agentsRouter = router({
         .where(eq(schema.deploys.target_kind, "agent"))
         .orderBy(desc(schema.deploys.when)),
       db.select().from(schema.signing_keys),
-      kvGet<AgentsKpi>("agents.kpi", {
-        active: 0,
-        paused: 0,
-        total: 0,
-        avg_trust: 0,
-        deploys_24h: 0,
-      }),
+      db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(schema.deploys)
+        .where(and(eq(schema.deploys.target_kind, "agent"), gte(schema.deploys.when, since24h))),
     ]);
 
     return {
@@ -45,7 +34,7 @@ export const agentsRouter = router({
             : Number(
                 (list.reduce((s, a) => s + a.trust_score, 0) / list.length).toFixed(2),
               ),
-        deploys_24h: kpi.deploys_24h,
+        deploys_24h: deploys24h[0]?.c ?? 0,
       },
       list: list.map((a) => ({
         id: a.id,

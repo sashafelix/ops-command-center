@@ -2,6 +2,9 @@ import type { Connector } from "./types";
 import { anthropicConnector } from "./anthropic";
 import { githubConnector } from "./github";
 import { proxmoxConnector } from "./proxmox";
+import { openaiConnector } from "./openai";
+import { slackConnector } from "./slack";
+import { httpConnector } from "./http";
 import { STUB_CONNECTORS } from "./stubs";
 
 /**
@@ -14,6 +17,9 @@ const ALL: Connector[] = [
   anthropicConnector,
   githubConnector,
   proxmoxConnector,
+  openaiConnector,
+  slackConnector,
+  httpConnector,
   ...STUB_CONNECTORS,
 ];
 

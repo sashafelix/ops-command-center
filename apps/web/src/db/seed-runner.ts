@@ -58,7 +58,7 @@ async function main() {
       service_load, slos, incidents, deploys, services, regions,
       status_signals, status_incidents, status_page_meta,
       signing_keys, agent_versions,
-      eval_regressions, eval_suites, eval_ab,
+      eval_runs, eval_regressions, eval_suites, eval_ab,
       budget_breaches, budgets, budget_meta,
       ad_hoc_reports, scheduled_reports, compliance_bundles,
       webhook_deliveries, webhooks, tokens, members, connections, prefs, workspace,
@@ -548,27 +548,15 @@ async function main() {
     // ----- Runtime -----
     await tx.insert(schema.runtime).values({ id: "default", paused: false });
 
-    // ----- KV meta (the per-surface KPI blobs) -----
-    type KvSeed = { key: string; data: unknown };
-    // live.kpi / live.now_playing / live.board / sessions.table are computed
-    // from the sessions table now (see routers/live.ts + routers/sessions.ts),
-    // so we no longer seed those KV blobs. sessions.receipt stays — the
-    // session detail page still falls back to it before hitting the row.
-    const kvSeeds: KvSeed[] = [
-      { key: "sessions.receipt", data: MOCK.receipt },
-      // approvals.counts removed — computed from the approvals table now
-      { key: "approvals.recent", data: MOCK.approvals.recent },
-      { key: "infra.kpi", data: MOCK.infra.kpi },
-      { key: "trust.kpi", data: MOCK.trust.kpi },
-      { key: "agents.kpi", data: MOCK.agents.kpi },
-      { key: "evals.kpi", data: MOCK.evals.kpi },
-      { key: "budgets.top_runs", data: MOCK.budgets.top_runs },
-    ];
-    for (const k of kvSeeds) {
-      await tx
-        .insert(schema.kv_meta)
-        .values({ key: k.key, data: k.data as Record<string, unknown> });
-    }
+    // ----- KV meta -----
+    // Every per-surface KPI strip is now computed from the relational store
+    // (see routers/*.ts). The only remaining KV blob is sessions.receipt —
+    // a hand-crafted receipt used as a fallback by the demo session detail
+    // page before falling through to the real DB row.
+    await tx.insert(schema.kv_meta).values({
+      key: "sessions.receipt",
+      data: MOCK.receipt as Record<string, unknown>,
+    });
 
     // ----- Audit chain (rebuilt deterministically) -----
     const actors = ["mara@ops", "devon@ops", "iris@ops", "kai@ops", "claude-code", "release-bot"];

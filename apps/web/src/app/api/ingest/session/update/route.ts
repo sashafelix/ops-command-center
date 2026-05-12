@@ -2,7 +2,6 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { ingestHandler } from "../../_runner";
-import { recomputeLiveBoard, recomputeLiveKpi } from "@/server/kv-recompute";
 import { notify } from "@/server/pg-notify";
 
 const Input = z.object({
@@ -45,8 +44,6 @@ export const POST = ingestHandler({
     if (updated.length === 0) {
       return { status: 404, body: { error: "unknown_session" } };
     }
-
-    await Promise.all([recomputeLiveKpi(), recomputeLiveBoard()]);
 
     // Lightweight tick payload for the live-board WS subscribers
     await notify("sessions", {

@@ -1,23 +1,14 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, sreProcedure, adminProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
-import { kvGet } from "@/db/kv";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
 
-type InfraKpi = { uptime: string; mttr: string; openIncidents: number; slosBreached: number };
-
 export const infraRouter = router({
   overview: protectedProcedure.query(async () => {
-    const [kpi, regions, services, load, incidents, deploys, slos] = await Promise.all([
-      kvGet<InfraKpi>("infra.kpi", {
-        uptime: "—",
-        mttr: "—",
-        openIncidents: 0,
-        slosBreached: 0,
-      }),
+    const [regions, services, load, incidents, deploys, slos] = await Promise.all([
       db.select().from(schema.regions),
       db.select().from(schema.services).orderBy(schema.services.name),
       db.select().from(schema.service_load),
@@ -41,8 +32,33 @@ export const infraRouter = router({
     }
     const loadShaped = Array.from(byService.entries()).map(([id, values]) => ({ id, values }));
 
+    // KPI strip — computed from the same rows we just pulled. No KV.
+    const openIncidents = incidents.filter((i) => i.status !== "resolved").length;
+    const slosBreached = slos.filter((s) => s.state === "bad").length;
+    // MTTR: average (resolved_at - started_at) over the last 30 days of
+    // resolved incidents. "—" when there are none to average.
+    const [{ mttr_s } = { mttr_s: null }] = await db.execute<{ mttr_s: number | null }>(sql`
+      SELECT EXTRACT(EPOCH FROM AVG(${schema.incidents.resolved_at} - ${schema.incidents.started_at}))::float8 AS mttr_s
+      FROM ${schema.incidents}
+      WHERE ${schema.incidents.resolved_at} IS NOT NULL
+        AND ${schema.incidents.started_at} > now() - interval '30 days'
+    `);
+    const mttr = mttr_s != null ? fmtDuration(Math.round(mttr_s)) : "—";
+    // Uptime: fraction of (24h - sum-of-incident-durations) / 24h. Bounded
+    // [0, 1]. Returns "—" if we have no incidents history to reason about.
+    const [{ down_s } = { down_s: null }] = await db.execute<{ down_s: number | null }>(sql`
+      SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (
+        COALESCE(${schema.incidents.resolved_at}, now()) - ${schema.incidents.started_at}
+      ))), 0)::float8 AS down_s
+      FROM ${schema.incidents}
+      WHERE ${schema.incidents.started_at} > now() - interval '24 hours'
+    `);
+    const downSeconds = Math.max(0, down_s ?? 0);
+    const uptimeFrac = Math.max(0, Math.min(1, 1 - downSeconds / 86_400));
+    const uptime = `${(uptimeFrac * 100).toFixed(3)}%`;
+
     return {
-      kpi,
+      kpi: { uptime, mttr, openIncidents, slosBreached },
       regions: regions.map((r) => ({
         id: r.id,
         name: r.name,
@@ -249,4 +265,16 @@ function deployTone(s: "rolled-out" | "rolling" | "rolled-back"): "ok" | "warn" 
   if (s === "rolled-back") return "bad";
   if (s === "rolling") return "warn";
   return "ok";
+}
+
+function fmtDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const restMin = m % 60;
+  if (h < 24) return restMin > 0 ? `${h}h ${restMin}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
 }

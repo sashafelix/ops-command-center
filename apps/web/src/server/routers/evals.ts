@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, analystProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
-import { kvGet } from "@/db/kv";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
 
@@ -26,14 +25,13 @@ type EvalABBlob = {
 
 export const evalsRouter = router({
   overview: protectedProcedure.query(async () => {
-    const [suites, regressions, ab, kpiOverride] = await Promise.all([
+    const [suites, regressions, ab] = await Promise.all([
       db.select().from(schema.eval_suites).orderBy(schema.eval_suites.id),
       db
         .select()
         .from(schema.eval_regressions)
         .orderBy(desc(schema.eval_regressions.first_fail)),
       db.select().from(schema.eval_ab).where(eq(schema.eval_ab.id, "default")),
-      kvGet<Partial<EvalsKpi>>("evals.kpi", {}),
     ]);
 
     // Per-suite live state: is there an in-flight run right now?
@@ -57,12 +55,20 @@ export const evalsRouter = router({
       .select({ c: sql<number>`count(*)::int` })
       .from(schema.eval_regressions);
 
+    // Drift: average (pass_rate - baseline_pass_rate) across suites. Negative
+    // = drifting worse, positive = improving. Computed from the same suites
+    // we just pulled; no KV override.
+    const avgDrift =
+      suites.length === 0
+        ? 0
+        : suites.reduce((s, x) => s + (x.pass_rate - x.baseline_pass_rate), 0) / suites.length;
+
     const kpi: EvalsKpi = {
       suites: suites.length,
       total_cases: totalCases,
-      passing: kpiOverride.passing ?? `${(avgPass * 100).toFixed(1)}%`,
+      passing: `${(avgPass * 100).toFixed(1)}%`,
       regressions: regCount,
-      drift: kpiOverride.drift ?? "0.0%",
+      drift: `${avgDrift >= 0 ? "+" : ""}${(avgDrift * 100).toFixed(1)}%`,
     };
 
     const abRow = ab[0];

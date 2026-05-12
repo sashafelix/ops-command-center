@@ -38,24 +38,6 @@ function stub(opts: {
 
 export const STUB_CONNECTORS: readonly Connector[] = [
   stub({
-    id: "openai",
-    name: "OpenAI API",
-    category: "Model providers",
-    requiredFieldKeys: ["api_key"],
-    fields: () => [
-      { k: "api_key", label: "API key", type: "secret", value: "env:OPENAI_API_KEY" },
-    ],
-  }),
-  stub({
-    id: "slack",
-    name: "Slack",
-    category: "Notifications",
-    requiredFieldKeys: ["bot_token"],
-    fields: () => [
-      { k: "bot_token", label: "Bot token", type: "secret", value: "env:SLACK_BOT_TOKEN" },
-    ],
-  }),
-  stub({
     id: "pagerduty",
     name: "PagerDuty",
     category: "Notifications",

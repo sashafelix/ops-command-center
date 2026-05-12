@@ -1,34 +1,26 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
-import { kvGet } from "@/db/kv";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
 
-type TrustKpi = {
-  active_threats: number;
-  open_investigations: number;
-  signed_pct: string;
-  policy_violations_24h: number;
-};
-
 export const trustRouter = router({
   overview: protectedProcedure.query(async () => {
-    const [kpi, threatRows, investigations, evidence] = await Promise.all([
-      kvGet<TrustKpi>("trust.kpi", {
-        active_threats: 0,
-        open_investigations: 0,
-        signed_pct: "—",
-        policy_violations_24h: 0,
-      }),
+    const [threatRows, investigations, evidence, policyViolations] = await Promise.all([
       db.select().from(schema.threat_buckets),
       db.select().from(schema.investigations).orderBy(desc(schema.investigations.opened_at)),
       db
         .select()
         .from(schema.evidence_events)
         .orderBy(desc(schema.evidence_events.signed_at)),
+      db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(schema.audit_events)
+        .where(
+          sql`${schema.audit_events.action} LIKE 'policy.%' AND ${schema.audit_events.ts} > now() - interval '24 hours'`,
+        ),
     ]);
 
     const byCategory = new Map<string, number[]>();
@@ -45,6 +37,18 @@ export const trustRouter = router({
       values,
       total: Math.round(values.reduce((s, v) => s + v, 0)),
     }));
+
+    // KPI — all computed from the queries above.
+    const totalEvidence = evidence.length;
+    const signedEvidence = evidence.filter((e) => e.signed).length;
+    const signed_pct =
+      totalEvidence === 0 ? "—" : `${((signedEvidence / totalEvidence) * 100).toFixed(1)}%`;
+    const kpi = {
+      active_threats: threats.reduce((s, t) => s + t.total, 0),
+      open_investigations: investigations.filter((i) => i.status !== "closed").length,
+      signed_pct,
+      policy_violations_24h: policyViolations[0]?.c ?? 0,
+    };
 
     return {
       kpi,
