@@ -15,6 +15,8 @@ export default function LoginPage({
   const callbackUrl =
     searchParams.from && searchParams.from.startsWith("/") ? searchParams.from : "/live";
   const isDev = process.env.NODE_ENV === "development";
+  const allowBypass = process.env.ALLOW_DEV_BYPASS === "1";
+  const bypassEnabled = isDev || allowBypass;
   const googleConfigured = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 
   return (
@@ -47,12 +49,12 @@ export default function LoginPage({
           </p>
         )}
 
-        {isDev && (
+        {bypassEnabled && (
           <>
             <div className="flex items-center gap-3 my-5" aria-hidden>
               <span className="flex-1 h-px bg-line/10" />
               <span className="font-mono text-[10.5px] tracking-widest text-fg-faint uppercase">
-                dev only
+                {isDev ? "dev only" : "bypass active"}
               </span>
               <span className="flex-1 h-px bg-line/10" />
             </div>
@@ -85,8 +87,9 @@ export default function LoginPage({
                 Continue without OIDC
               </button>
               <p className="text-11 text-fg-faint">
-                Dev bypass — only available when NODE_ENV=development. Never registered in
-                production.
+                {isDev
+                  ? "Dev bypass — only available when NODE_ENV=development."
+                  : "ALLOW_DEV_BYPASS=1 — anyone reachable can sign in. Single-user / VPN-only deploys only."}
               </p>
             </form>
           </>

@@ -66,6 +66,10 @@ services:
       AUTH_URL: "${AUTH_URL:-http://localhost:3000}"
       AUTH_GOOGLE_ID: "${AUTH_GOOGLE_ID:-}"
       AUTH_GOOGLE_SECRET: "${AUTH_GOOGLE_SECRET:-}"
+      # Single-operator escape hatch — re-enables the dev credentials bypass
+      # on production builds. ONLY safe behind a VPN / Tailscale / firewall.
+      # Disable + configure OIDC before exposing publicly.
+      ALLOW_DEV_BYPASS: "${ALLOW_DEV_BYPASS:-}"
       # Realtime — shared with the realtime worker
       REALTIME_JWT_SECRET: "${REALTIME_JWT_SECRET:?REALTIME_JWT_SECRET must be set}"
       NEXT_PUBLIC_REALTIME_URL: "${NEXT_PUBLIC_REALTIME_URL:-ws://localhost:4001}"
