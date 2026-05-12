@@ -6,6 +6,10 @@ import { protectedProcedure, adminProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
+import { generateReport, humanBytes, type ReportFormat, type ReportKind } from "../report-content";
+
+const ReportKindEnum = z.enum(["audit-events", "sessions", "approvals"]);
+const ReportFormatEnum = z.enum(["JSONL", "JSON", "CSV"]);
 
 export const reportsRouter = router({
   overview: protectedProcedure.query(async () => {
@@ -45,6 +49,9 @@ export const reportsRouter = router({
         by: r.by,
         when: r.generated_at.toLocaleDateString(),
         size: r.size,
+        kind: r.kind,
+        format: r.format,
+        has_content: r.content.length > 0,
       })),
       bundles: bundles.map((b) => ({
         id: b.id as "soc2" | "iso27001" | "eu-ai-act",
@@ -59,10 +66,11 @@ export const reportsRouter = router({
   }),
 
   /**
-   * Fire a scheduled report on-demand. Records an ad_hoc_reports row using
-   * the scheduled template's name + format and bumps last_run to "just
-   * now". Audit action `report.runScheduled` so the reports KPI
-   * `delivered_30d` count is real (it filters on action LIKE 'report.%').
+   * Fire a scheduled report on-demand. Generates real content (last 7 days
+   * of the scheduled report's kind, defaulting to audit-events if the
+   * scheduled row didn't specify), records an ad_hoc_reports row, updates
+   * last_run. Audit action `report.runScheduled` so the reports KPI
+   * `delivered_30d` count is real.
    */
   runScheduled: adminProcedure
     .input(z.object({ id: z.string().min(1).max(120) }))
@@ -76,12 +84,20 @@ export const reportsRouter = router({
 
       const actor = ctx.session.user.email ?? "unknown";
       const adhocId = `rpt_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      const format = (sched.format as ReportFormat) ?? "JSONL";
+      // Scheduled rows don't carry a kind yet — default to audit-events,
+      // which is the most useful general-purpose snapshot.
+      const kind: ReportKind = "audit-events";
+      const report = await generateReport(kind, format);
 
       await db.insert(schema.ad_hoc_reports).values({
         id: adhocId,
         name: `${sched.name} (manual run)`,
         by: actor,
-        size: "queued",
+        size: `${humanBytes(report.body.length)} · ${report.rowCount} rows`,
+        kind,
+        format,
+        content: report.body,
       });
 
       await db
@@ -100,25 +116,33 @@ export const reportsRouter = router({
     }),
 
   /**
-   * One-off ad-hoc report. Records the row + audit event; actual content
-   * generation lands later (along with a real download endpoint).
+   * One-off ad-hoc report. Generates real content immediately so the
+   * download route can serve it without a worker round-trip. JSONL is the
+   * default — line-delimited JSON is friendly to grep/jq/cut.
    */
   runAdHoc: adminProcedure
     .input(
       z.object({
         name: z.string().min(1).max(160),
-        format: z.enum(["PDF", "CSV", "JSONL"]).optional(),
+        kind: ReportKindEnum.default("audit-events"),
+        format: ReportFormatEnum.default("JSONL"),
+        since_days: z.number().int().min(1).max(365).default(7),
       }),
     )
     .mutation(async ({ input, ctx }) => {
       await requireFreshAuth(ctx);
       const actor = ctx.session.user.email ?? "unknown";
       const id = `rpt_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      const report = await generateReport(input.kind, input.format, input.since_days);
+
       await db.insert(schema.ad_hoc_reports).values({
         id,
         name: input.name,
         by: actor,
-        size: "queued",
+        size: `${humanBytes(report.body.length)} · ${report.rowCount} rows`,
+        kind: input.kind,
+        format: input.format,
+        content: report.body,
       });
       await appendAuditEvent({
         actor,

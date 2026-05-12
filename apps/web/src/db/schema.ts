@@ -530,6 +530,12 @@ export const ad_hoc_reports = pgTable("ad_hoc_reports", {
   by: text("by").notNull(),
   generated_at: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
   size: text("size").notNull(),
+  /** What this report is over — picks the data source on generate. */
+  kind: text("kind").notNull().default("audit-events"),
+  /** Serialization format. Drives Content-Type on download. */
+  format: text("format").notNull().default("JSONL"),
+  /** Generated content body. Empty until the row has been materialized. */
+  content: text("content").notNull().default(""),
 });
 
 export const compliance_bundles = pgTable("compliance_bundles", {
