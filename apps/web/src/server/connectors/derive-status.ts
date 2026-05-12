@@ -38,7 +38,9 @@ export function deriveStatus(c: DerivableConnection): {
 } {
   const connector = connectorFor(c.id);
 
-  if (!connector) {
+  // No registry entry OR registry entry is a stub → "stub" state. The UI
+  // disables Test in both cases; the operator can still edit fields.
+  if (!connector || !connector.implemented) {
     return { status: "stub", health: "warn" };
   }
 

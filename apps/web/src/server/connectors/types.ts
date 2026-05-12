@@ -22,6 +22,13 @@ export interface Connector {
    */
   readonly requiredFieldKeys: readonly string[];
   /**
+   * True when a real `test()` exists. Stub types still expose the field
+   * shape (so operators can configure them) but `test()` returns
+   * { ok: false, reason: "stub" }. The UI uses this flag to disable the
+   * Test button and render a "no connector" label.
+   */
+  readonly implemented: boolean;
+  /**
    * Field shape used when an operator creates a fresh connection of this
    * type from the UI. Values are starter defaults (URLs may be filled in,
    * secrets typically blank or `env:NAME`).
