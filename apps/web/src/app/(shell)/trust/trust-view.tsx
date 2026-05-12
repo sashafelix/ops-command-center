@@ -1,16 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { Signature, ShieldAlert } from "lucide-react";
+import { Signature, ShieldAlert, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
 import { StatusDot } from "@/components/status-dot";
 import { Heatmap, type HeatmapRow } from "@/components/heatmap";
+import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { cn } from "@/lib/utils";
 
+const INVESTIGATION_STATES = ["open", "triage", "closed"] as const;
+
 export function TrustView({ initial }: { initial: RouterOutputs["trust"]["overview"] }) {
+  const utils = trpc.useUtils();
+  const { requireFreshAuth } = useReauthGate();
   const q = trpc.trust.overview.useQuery(undefined, { initialData: initial });
+  const setStatus = trpc.trust.setInvestigationStatus.useMutation({
+    onSuccess: () => void utils.trust.overview.invalidate(),
+  });
+
+  async function onSetStatus(id: string, status: (typeof INVESTIGATION_STATES)[number]) {
+    const ok = await requireFreshAuth(`Move investigation ${id} → ${status}.`);
+    if (!ok) return;
+    setStatus.mutate({ id, status });
+  }
 
   if (q.isLoading || !q.data) {
     return (
@@ -85,14 +99,30 @@ export function TrustView({ initial }: { initial: RouterOutputs["trust"]["overvi
                     <Signature size={10} aria-hidden /> {i.evidence_status}
                   </span>
                   <span className="font-mono text-11 text-fg-faint w-16 text-right">{i.age}</span>
-                  <span className={cn(
-                    "chip",
-                    i.status === "open" && "warn",
-                    i.status === "triage" && "info",
-                    i.status === "closed" && "ok",
-                  )}>
-                    {i.status}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {INVESTIGATION_STATES.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => void onSetStatus(i.id, s)}
+                        disabled={i.status === s || (setStatus.isPending && setStatus.variables?.id === i.id)}
+                        title={`Set status to ${s}`}
+                        className={cn(
+                          "chip cursor-pointer hover:border-line2",
+                          i.status === s && s === "open" && "warn",
+                          i.status === s && s === "triage" && "info",
+                          i.status === s && s === "closed" && "ok",
+                          i.status !== s && "text-fg-faint",
+                          "disabled:cursor-default",
+                        )}
+                      >
+                        {setStatus.isPending && setStatus.variables?.id === i.id && setStatus.variables?.status === s ? (
+                          <Loader2 size={10} className="animate-spin" aria-hidden />
+                        ) : null}
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

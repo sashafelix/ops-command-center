@@ -87,6 +87,31 @@ export const agentsRouter = router({
     };
   }),
 
+  /** Toggle an agent between active / paused / drained. SRE+, re-auth, audit. */
+  setStatus: sreProcedure
+    .input(
+      z.object({
+        id: z.string().min(1).max(120),
+        status: z.enum(["active", "paused", "drained"]),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const updated = await db
+        .update(schema.agent_versions)
+        .set({ status: input.status })
+        .where(eq(schema.agent_versions.id, input.id))
+        .returning({ id: schema.agent_versions.id, status: schema.agent_versions.status });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: `agent.${input.status}`,
+        target: `agent/${input.id}`,
+      });
+      return { id: input.id, status: input.status };
+    }),
+
   /** Destructive — SRE+, re-auth, audit-event. */
   rollback: sreProcedure
     .input(z.object({ deploy_id: z.string() }))

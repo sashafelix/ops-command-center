@@ -1,20 +1,46 @@
 "use client";
 
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { StatusDot } from "@/components/status-dot";
 import { Heatmap, type HeatmapRow } from "@/components/heatmap";
+import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { cn } from "@/lib/utils";
 
 type Mode = "internal" | "public";
+const INCIDENT_STATES = ["investigating", "monitoring", "resolved"] as const;
 
 export function StatusPageView({ initial }: { initial: RouterOutputs["statusPage"]["overview"] }) {
+  const utils = trpc.useUtils();
+  const { requireFreshAuth } = useReauthGate();
   const [mode, setMode] = useState<Mode>("internal");
   const q = trpc.statusPage.overview.useQuery(
     { mode },
     mode === "internal" ? { initialData: initial } : {},
   );
+
+  const setPublished = trpc.statusPage.setPublished.useMutation({
+    onSuccess: () => void utils.statusPage.overview.invalidate(),
+  });
+  const setIncidentState = trpc.statusPage.setIncidentState.useMutation({
+    onSuccess: () => void utils.statusPage.overview.invalidate(),
+  });
+
+  async function onTogglePublished(next: boolean) {
+    const ok = await requireFreshAuth(
+      next ? "Publish the status page." : "Unpublish the status page (set to draft).",
+    );
+    if (!ok) return;
+    setPublished.mutate({ published: next });
+  }
+
+  async function onSetIncidentState(id: string, state: (typeof INCIDENT_STATES)[number]) {
+    const ok = await requireFreshAuth(`Move incident ${id} → ${state}.`);
+    if (!ok) return;
+    setIncidentState.mutate({ id, state });
+  }
 
   if (q.isLoading || !q.data) {
     return (
@@ -44,9 +70,21 @@ export function StatusPageView({ initial }: { initial: RouterOutputs["statusPage
         </div>
         <div className="flex items-center gap-2">
           <span className="font-mono text-11 text-fg-faint">{d.url}</span>
-          <span className={cn("chip", d.published ? "ok" : "warn")}>
+          <button
+            type="button"
+            onClick={() => void onTogglePublished(!d.published)}
+            disabled={setPublished.isPending}
+            title={d.published ? "Unpublish (set to draft)" : "Publish"}
+            className={cn(
+              "chip cursor-pointer hover:border-line2 disabled:opacity-60 disabled:cursor-wait",
+              d.published ? "ok" : "warn",
+            )}
+          >
+            {setPublished.isPending ? (
+              <Loader2 size={10} className="animate-spin mr-1" aria-hidden />
+            ) : null}
             {d.published ? "published" : "draft"}
-          </span>
+          </button>
           <div className="flex items-center gap-1 panel2 p-0.5">
             <ModeButton current={mode} mode="internal" onClick={() => setMode("internal")} />
             <ModeButton current={mode} mode="public" onClick={() => setMode("public")} />
@@ -118,6 +156,35 @@ export function StatusPageView({ initial }: { initial: RouterOutputs["statusPage
                 <span className="font-mono text-11 text-fg-muted">{i.started_at}</span>
                 <span className="font-mono text-11 text-fg-faint num">{i.updates} updates</span>
                 <span className={cn("chip", i.public ? "info" : "warn")}>{i.public ? "public" : "internal"}</span>
+                <div className="flex items-center gap-1">
+                  {INCIDENT_STATES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => void onSetIncidentState(i.id, s)}
+                      disabled={
+                        i.state === s ||
+                        (setIncidentState.isPending && setIncidentState.variables?.id === i.id)
+                      }
+                      title={`Set state to ${s}`}
+                      className={cn(
+                        "chip cursor-pointer hover:border-line2",
+                        i.state === s && s === "resolved" && "ok",
+                        i.state === s && s === "monitoring" && "info",
+                        i.state === s && s === "investigating" && "warn",
+                        i.state !== s && "text-fg-faint",
+                        "disabled:cursor-default",
+                      )}
+                    >
+                      {setIncidentState.isPending &&
+                      setIncidentState.variables?.id === i.id &&
+                      setIncidentState.variables?.state === s ? (
+                        <Loader2 size={10} className="animate-spin" aria-hidden />
+                      ) : null}
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
