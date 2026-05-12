@@ -9,7 +9,8 @@ import { DialogCloseButton } from "@/components/dialog-close-button";
 import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { cn } from "@/lib/utils";
 
-type Format = "PDF" | "CSV" | "JSONL";
+type Format = "JSONL" | "JSON" | "CSV";
+type Kind = "audit-events" | "sessions" | "approvals";
 
 export function ReportsView({ initial }: { initial: RouterOutputs["reports"]["overview"] }) {
   const utils = trpc.useUtils();
@@ -164,17 +165,29 @@ export function ReportsView({ initial }: { initial: RouterOutputs["reports"]["ov
               <div key={r.id} className="px-3 py-2 flex items-center gap-3 text-12">
                 <FileText size={12} className="text-fg-faint" aria-hidden />
                 <span className="text-fg flex-1 truncate">{r.name}</span>
+                <span className="chip">{r.kind}</span>
+                <span className="chip">{r.format}</span>
                 <span className="text-fg-muted">{r.by}</span>
-                <span className="font-mono text-11 text-fg-faint w-20 text-right">{r.size}</span>
+                <span className="font-mono text-11 text-fg-faint w-44 text-right truncate">
+                  {r.size}
+                </span>
                 <span className="text-11 text-fg-faint w-24 text-right">{r.when}</span>
-                <button
-                  type="button"
-                  disabled
-                  title="Real content generation lands in a follow-up PR"
-                  className="h-7 px-2 panel2 text-11 text-fg-faint opacity-40 cursor-not-allowed inline-flex items-center gap-1"
-                >
-                  <Download size={11} aria-hidden /> Download
-                </button>
+                {r.has_content ? (
+                  <a
+                    href={`/api/reports/${r.id}/download`}
+                    download
+                    className="h-7 px-2 panel2 hover:border-line2 text-11 text-fg-muted hover:text-fg inline-flex items-center gap-1"
+                  >
+                    <Download size={11} aria-hidden /> Download
+                  </a>
+                ) : (
+                  <span
+                    title="No content stored for this row"
+                    className="h-7 px-2 panel2 text-11 text-fg-faint opacity-40 inline-flex items-center gap-1"
+                  >
+                    <Download size={11} aria-hidden /> Download
+                  </span>
+                )}
               </div>
             ))
           )}
@@ -238,10 +251,13 @@ export function ReportsView({ initial }: { initial: RouterOutputs["reports"]["ov
       {adHocOpen && (
         <NewAdHocDialog
           onClose={() => setAdHocOpen(false)}
-          onSubmit={async (name, format) => {
+          onSubmit={async (name, kind, format) => {
             const ok = await requireFreshAuth(`Create ad-hoc report ${name}.`);
             if (!ok) return;
-            runAdHoc.mutate({ name, format }, { onSuccess: () => setAdHocOpen(false) });
+            runAdHoc.mutate(
+              { name, kind, format },
+              { onSuccess: () => setAdHocOpen(false) },
+            );
           }}
           busy={runAdHoc.isPending}
           error={runAdHoc.error?.message ?? null}
@@ -258,11 +274,12 @@ function NewAdHocDialog({
   error,
 }: {
   onClose: () => void;
-  onSubmit: (name: string, format: Format) => void;
+  onSubmit: (name: string, kind: Kind, format: Format) => void;
   busy: boolean;
   error: string | null;
 }) {
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<Kind>("audit-events");
   const [format, setFormat] = useState<Format>("JSONL");
   const valid = name.trim().length > 0;
   return (
@@ -278,7 +295,8 @@ function NewAdHocDialog({
         <header className="mb-3 pr-8">
           <h3 className="text-13 font-semibold text-fg">New ad-hoc report</h3>
           <p className="text-11 text-fg-muted mt-1">
-            Records the request. Real content generation lands in a follow-up PR.
+            Generates a 7-day snapshot from the chosen data source and stores it
+            on the row. Downloadable immediately.
           </p>
         </header>
 
@@ -292,9 +310,26 @@ function NewAdHocDialog({
           className="w-full h-8 panel2 bg-transparent px-2 text-12 text-fg outline-none focus:border-line2 mb-3"
         />
 
+        <label className="block text-11 text-fg-muted mb-1">Source</label>
+        <div className="flex items-center gap-2 mb-3">
+          {(["audit-events", "sessions", "approvals"] as Kind[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={cn(
+                "h-8 px-3 panel2 text-12",
+                kind === k ? "text-fg border-line2" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+
         <label className="block text-11 text-fg-muted mb-1">Format</label>
         <div className="flex items-center gap-2 mb-3">
-          {(["PDF", "CSV", "JSONL"] as Format[]).map((f) => (
+          {(["JSONL", "JSON", "CSV"] as Format[]).map((f) => (
             <button
               key={f}
               type="button"
@@ -322,7 +357,7 @@ function NewAdHocDialog({
           </button>
           <button
             type="button"
-            onClick={() => onSubmit(name.trim(), format)}
+            onClick={() => onSubmit(name.trim(), kind, format)}
             disabled={!valid || busy}
             className="h-8 px-3 panel2 hover:border-line2 text-12 text-fg flex items-center gap-1.5 disabled:opacity-50"
           >

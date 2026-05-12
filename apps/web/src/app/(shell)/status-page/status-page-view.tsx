@@ -112,7 +112,13 @@ export function StatusPageView({ initial }: { initial: RouterOutputs["statusPage
             90-day uptime
           </h3>
           <div className="panel p-4">
-            <Heatmap rows={uptimeRows} cellSize={6} gap={1} ariaLabel="90 day uptime by public signal" />
+            <Heatmap
+              rows={uptimeRows}
+              mode="uptime"
+              cellSize={6}
+              gap={1}
+              ariaLabel="90 day uptime by public signal"
+            />
           </div>
         </div>
 

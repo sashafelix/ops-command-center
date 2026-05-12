@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { heatBucket, HEAT_VAR } from "./heatmap-utils";
+import { heatBucket, HEAT_VAR, uptimeBucket, UPTIME_VAR } from "./heatmap-utils";
 
 export type HeatmapRow = {
   /** Row label rendered to the left of the cells. */
@@ -9,6 +9,13 @@ export type HeatmapRow = {
   /** Optional summary in the right gutter (e.g. running total). */
   summary?: string;
 };
+
+/** Color scale.
+ *  - `heat`   (default): cold → hot. 0 = blue, 1 = red. Use for CPU, threats.
+ *  - `uptime`:           good → bad. 1 = green, <90% = red. Use for uptime
+ *                        strips where the heat scale would collapse every
+ *                        five-nines value into the same bright red. */
+export type HeatmapMode = "heat" | "uptime";
 
 /**
  * Compact heat grid used by Trust threats, Status uptime, Infra CPU.
@@ -20,15 +27,19 @@ export function Heatmap({
   rows,
   cellSize = 14,
   gap = 2,
+  mode = "heat",
   className,
   ariaLabel,
 }: {
   rows: HeatmapRow[];
   cellSize?: number;
   gap?: number;
+  mode?: HeatmapMode;
   className?: string;
   ariaLabel?: string;
 }) {
+  const bucket = mode === "uptime" ? uptimeBucket : heatBucket;
+  const palette = mode === "uptime" ? UPTIME_VAR : HEAT_VAR;
   return (
     <div className={cn("flex flex-col gap-1.5", className)} aria-label={ariaLabel} role="img">
       {rows.map((r) => (
@@ -36,16 +47,17 @@ export function Heatmap({
           <div className="text-12 text-fg-muted w-32 shrink-0 truncate">{r.label}</div>
           <div className="flex" style={{ gap }}>
             {r.values.map((v, i) => {
-              const b = heatBucket(v);
+              const b = bucket(v);
+              const titleVal = mode === "uptime" ? `${(v * 100).toFixed(3)}%` : v.toFixed(3);
               return (
                 <span
                   key={i}
-                  title={`${r.label} · ${i}: ${v.toFixed(3)}`}
+                  title={`${r.label} · ${i}: ${titleVal}`}
                   className="inline-block"
                   style={{
                     width: cellSize,
                     height: cellSize,
-                    background: HEAT_VAR[b],
+                    background: palette[b],
                     borderRadius: 2,
                   }}
                 />
