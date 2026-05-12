@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play } from "lucide-react";
+import { Play, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
@@ -13,7 +13,23 @@ import { cn } from "@/lib/utils";
 type Toast = { id: string; suite: string; runId: string };
 
 export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overview"] }) {
-  const q = trpc.evals.overview.useQuery(undefined, { initialData: initial });
+  const utils = trpc.useUtils();
+  // Refetch on a short interval whenever any run is in flight so the
+  // running state + pass_rate update without manual reload. Once nothing's
+  // running we drop back to a long stale time so the page is cheap.
+  const q = trpc.evals.overview.useQuery(undefined, {
+    initialData: initial,
+    refetchInterval: (query) => (query.state.data?.suites.some((s) => s.running) ? 2_000 : false),
+  });
+  const recentRuns = trpc.evals.recentRuns.useQuery(
+    { limit: 20 },
+    {
+      refetchInterval: (query) => {
+        const data = query.state.data ?? [];
+        return data.some((r) => r.status === "queued" || r.status === "running") ? 2_000 : 10_000;
+      },
+    },
+  );
   const { requireFreshAuth } = useReauthGate();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const run = trpc.evals.runSuite.useMutation({
@@ -21,6 +37,8 @@ export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overvi
       const id = `${r.run_id}-${Date.now()}`;
       setToasts((t) => [...t, { id, suite: r.suite_id, runId: r.run_id }]);
       setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+      void utils.evals.overview.invalidate();
+      void utils.evals.recentRuns.invalidate();
     },
   });
 
@@ -86,6 +104,14 @@ export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overvi
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <StatusDot tone={s.status} label={s.id} />
+                        {s.running && (
+                          <span
+                            className="chip info inline-flex items-center gap-1"
+                            title="A run is queued or in progress"
+                          >
+                            <Loader2 size={10} className="animate-spin" aria-hidden /> running
+                          </span>
+                        )}
                       </div>
                       <div className="text-11 text-fg-muted ml-4 mt-0.5">{s.model}</div>
                     </td>
@@ -106,10 +132,16 @@ export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overvi
                       <button
                         type="button"
                         onClick={() => void handleRun(s.id)}
-                        disabled={run.isPending}
-                        className="h-7 px-2 panel2 text-11 text-fg-muted hover:text-fg flex items-center gap-1"
+                        disabled={run.isPending || s.running}
+                        title={s.running ? "A run is already in flight" : "Queue a run"}
+                        className="h-7 px-2 panel2 text-11 text-fg-muted hover:text-fg flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Play size={11} aria-hidden /> Run
+                        {s.running ? (
+                          <Loader2 size={11} className="animate-spin" aria-hidden />
+                        ) : (
+                          <Play size={11} aria-hidden />
+                        )}
+                        Run
                       </button>
                     </td>
                   </tr>
@@ -160,6 +192,56 @@ export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overvi
             )}
           </section>
         </div>
+      </section>
+
+      <section>
+        <h2 className="font-mono text-[10.5px] tracking-widest uppercase text-fg-faint px-1 mb-2">
+          Recent runs
+        </h2>
+        {recentRuns.isLoading && !recentRuns.data ? (
+          <div className="panel p-4 text-12 text-fg-muted">loading…</div>
+        ) : (recentRuns.data ?? []).length === 0 ? (
+          <div className="panel p-4 text-12 text-fg-muted">No runs yet.</div>
+        ) : (
+          <div className="panel divide-y">
+            {(recentRuns.data ?? []).map((r) => {
+              const tone =
+                r.status === "passed"
+                  ? "text-ok"
+                  : r.status === "failed" || r.status === "error"
+                    ? "text-bad"
+                    : "text-warn";
+              const elapsedMs =
+                r.finished_at && r.started_at
+                  ? Date.parse(r.finished_at) - Date.parse(r.started_at)
+                  : null;
+              return (
+                <div key={r.id} className="px-3 py-2 grid grid-cols-12 items-center gap-2 text-12">
+                  <span className={cn("col-span-2 font-mono", tone)}>
+                    {r.status === "queued" || r.status === "running" ? (
+                      <Loader2 size={11} className="inline animate-spin mr-1" aria-hidden />
+                    ) : null}
+                    {r.status}
+                  </span>
+                  <span className="col-span-2 font-mono text-fg-muted truncate">{r.suite_id}</span>
+                  <span className="col-span-3 font-mono text-fg-faint truncate">{r.started_by}</span>
+                  <span className="col-span-2 text-right font-mono text-fg num">
+                    {r.pass_rate != null ? `${(r.pass_rate * 100).toFixed(1)}%` : "—"}
+                  </span>
+                  <span className="col-span-1 text-right font-mono text-fg-muted num">
+                    {r.cases_run != null ? r.cases_run : "—"}
+                  </span>
+                  <span className="col-span-1 text-right font-mono text-fg-faint num">
+                    {elapsedMs != null ? `${(elapsedMs / 1000).toFixed(1)}s` : "—"}
+                  </span>
+                  <span className="col-span-1 text-right font-mono text-11 text-fg-faint">
+                    {relTime(r.created_at)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* Toast region */}
@@ -224,4 +306,16 @@ function Row({
       </div>
     </div>
   );
+}
+
+function relTime(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.floor(h / 24)} d ago`;
 }
