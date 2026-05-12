@@ -86,7 +86,9 @@ export function SettingsShell({
           {section === "notifications" && <NotificationsSection items={data.connections} />}
           {section === "prefs" && <PrefsSection prefs={data.prefs} />}
           {section === "audit" && <AuditSection />}
-          {section === "about" && <AboutSection about={data.about} />}
+          {section === "about" && (
+            <AboutSection about={data.about} workspaceName={data.general.workspace_name} />
+          )}
         </section>
       </div>
     </div>
