@@ -42,6 +42,13 @@ export const incidentStatusEnum = pgEnum("incident_status", ["investigating", "m
 export const agentStatusEnum = pgEnum("agent_status", ["active", "paused", "drained"]);
 export const deployStatusEnum = pgEnum("deploy_status", ["rolled-out", "rolling", "rolled-back"]);
 export const evalStatusEnum = pgEnum("eval_status", ["ok", "warn", "bad"]);
+export const evalRunStatusEnum = pgEnum("eval_run_status", [
+  "queued",
+  "running",
+  "passed",
+  "failed",
+  "error",
+]);
 export const reportFormatEnum = pgEnum("report_format", ["PDF", "CSV", "JSONL"]);
 export const bundleStatusEnum = pgEnum("bundle_status", ["ready", "stale", "building"]);
 export const memberRoleEnum = pgEnum("member_role", ["Owner", "Admin", "SRE", "Analyst", "Viewer"]);
@@ -307,6 +314,34 @@ export const eval_suites = pgTable("eval_suites", {
   trend: jsonb("trend").$type<number[]>().notNull().default([]),
   last_ran_at: timestamp("last_ran_at", { withTimezone: true }),
 });
+
+/**
+ * One row per eval-suite run. The realtime worker (apps/realtime/eval-tick.ts)
+ * claims queued rows, simulates the run, and updates pass_rate + cases_run
+ * on completion. The suite's cached pass_rate / last_ran_at get bumped from
+ * the latest completed run.
+ */
+export const eval_runs = pgTable(
+  "eval_runs",
+  {
+    id: text("id").primaryKey(),
+    suite_id: text("suite_id")
+      .notNull()
+      .references(() => eval_suites.id, { onDelete: "cascade" }),
+    status: evalRunStatusEnum("status").notNull().default("queued"),
+    started_by: text("started_by").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    started_at: timestamp("started_at", { withTimezone: true }),
+    finished_at: timestamp("finished_at", { withTimezone: true }),
+    pass_rate: doublePrecision("pass_rate"),
+    cases_run: integer("cases_run"),
+    error: text("error"),
+  },
+  (t) => ({
+    by_suite_recent: index("eval_runs_suite_id_created_at_idx").on(t.suite_id, t.created_at),
+    pending: index("eval_runs_pending_idx").on(t.created_at),
+  }),
+);
 
 export const eval_regressions = pgTable("eval_regressions", {
   id: text("id").primaryKey(),

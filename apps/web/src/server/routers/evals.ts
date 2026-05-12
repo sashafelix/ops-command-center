@@ -1,5 +1,7 @@
-import { eq, desc, sql } from "drizzle-orm";
+import { desc, eq, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, analystProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
 import { kvGet } from "@/db/kv";
@@ -22,8 +24,6 @@ type EvalABBlob = {
   significance: string;
 };
 
-let runCounter = 1000;
-
 export const evalsRouter = router({
   overview: protectedProcedure.query(async () => {
     const [suites, regressions, ab, kpiOverride] = await Promise.all([
@@ -35,6 +35,17 @@ export const evalsRouter = router({
       db.select().from(schema.eval_ab).where(eq(schema.eval_ab.id, "default")),
       kvGet<Partial<EvalsKpi>>("evals.kpi", {}),
     ]);
+
+    // Per-suite live state: is there an in-flight run right now?
+    const inflight = await db
+      .select({
+        suite_id: schema.eval_runs.suite_id,
+        c: sql<number>`count(*)::int`,
+      })
+      .from(schema.eval_runs)
+      .where(inArray(schema.eval_runs.status, ["queued", "running"]))
+      .groupBy(schema.eval_runs.suite_id);
+    const inflightBySuite = new Map(inflight.map((r) => [r.suite_id, r.c]));
 
     const totalCases = suites.reduce((s, x) => s + x.cases, 0);
     const avgPass =
@@ -84,6 +95,7 @@ export const evalsRouter = router({
         flake_rate: s.flake_rate,
         status: s.status,
         trend: s.trend,
+        running: (inflightBySuite.get(s.id) ?? 0) > 0,
       })),
       regressions: regressions.map((r) => ({
         id: r.id,
@@ -99,15 +111,81 @@ export const evalsRouter = router({
     };
   }),
 
-  /** Analyst+ — consumes budget. Re-auth + audit-event. */
+  /**
+   * Recent runs — optional suite filter, newest first.
+   */
+  recentRuns: protectedProcedure
+    .input(
+      z
+        .object({
+          suite_id: z.string().min(1).max(120).optional(),
+          limit: z.number().int().min(1).max(200).default(50),
+        })
+        .optional(),
+    )
+    .query(async ({ input }) => {
+      const i = input ?? { limit: 50 };
+      const baseQ = db
+        .select({
+          id: schema.eval_runs.id,
+          suite_id: schema.eval_runs.suite_id,
+          status: schema.eval_runs.status,
+          started_by: schema.eval_runs.started_by,
+          created_at: schema.eval_runs.created_at,
+          started_at: schema.eval_runs.started_at,
+          finished_at: schema.eval_runs.finished_at,
+          pass_rate: schema.eval_runs.pass_rate,
+          cases_run: schema.eval_runs.cases_run,
+          error: schema.eval_runs.error,
+        })
+        .from(schema.eval_runs)
+        .orderBy(desc(schema.eval_runs.created_at));
+      const rows = i.suite_id
+        ? await baseQ.where(eq(schema.eval_runs.suite_id, i.suite_id)).limit(i.limit ?? 50)
+        : await baseQ.limit(i.limit ?? 50);
+      return rows.map((r) => ({
+        id: r.id,
+        suite_id: r.suite_id,
+        status: r.status as "queued" | "running" | "passed" | "failed" | "error",
+        started_by: r.started_by,
+        created_at: r.created_at.toISOString(),
+        started_at: r.started_at?.toISOString() ?? null,
+        finished_at: r.finished_at?.toISOString() ?? null,
+        pass_rate: r.pass_rate,
+        cases_run: r.cases_run,
+        error: r.error,
+      }));
+    }),
+
+  /**
+   * Queue a real eval run. The realtime worker (apps/realtime/eval-tick.ts)
+   * picks the row up, simulates execution, and updates the suite's cached
+   * pass_rate / last_ran_at when done.
+   */
   runSuite: analystProcedure
-    .input(z.object({ suite_id: z.string() }))
+    .input(z.object({ suite_id: z.string().min(1).max(120) }))
     .mutation(async ({ input, ctx }) => {
       await requireFreshAuth(ctx);
-      runCounter += 1;
-      const run_id = `run_${runCounter.toString(36)}`;
+      const [suite] = await db
+        .select({ id: schema.eval_suites.id })
+        .from(schema.eval_suites)
+        .where(eq(schema.eval_suites.id, input.suite_id));
+      if (!suite) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const actor = ctx.session.user.email ?? "unknown";
+      const run_id = `run_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+      await db.insert(schema.eval_runs).values({
+        id: run_id,
+        suite_id: input.suite_id,
+        status: "queued",
+        started_by: actor,
+      });
+
+      // Wake the worker so it doesn't have to wait for the next poll.
+      await db.execute(sql`SELECT pg_notify('eval_run_pending', '')`);
+
       await appendAuditEvent({
-        actor: ctx.session.user.email ?? "unknown",
+        actor,
         role: "admin",
         action: "evals.run",
         target: `suite/${input.suite_id}`,

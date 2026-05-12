@@ -8,6 +8,7 @@ import { nextNowPlayingTick } from "./mock-source";
 import { startPgListener } from "./pg-listen";
 import { startSyncTick } from "./sync-tick";
 import { startWebhookTick } from "./webhook-tick";
+import { startEvalTick } from "./eval-tick";
 
 const HOST = process.env.REALTIME_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.REALTIME_PORT ?? 4001);
@@ -110,4 +111,9 @@ startSyncTick();
 // Webhook delivery worker — POSTs registered URLs when audit events match.
 void startWebhookTick().catch((err: unknown) => {
   console.error("[realtime] webhook tick failed to start", err);
+});
+
+// Eval run worker — claims queued rows from eval_runs and simulates execution.
+void startEvalTick().catch((err: unknown) => {
+  console.error("[realtime] eval tick failed to start", err);
 });
