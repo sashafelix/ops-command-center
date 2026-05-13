@@ -122,14 +122,18 @@ export type ApprovalInput = {
 };
 
 export class AgentClientError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly endpoint: string,
-    readonly body?: unknown,
-  ) {
+  // Plain field declarations rather than TS parameter-properties so the
+  // SDK can be consumed by Node's type-stripping mode (>=22.6) without a
+  // build step — that's how the claude-code-hook runs the .mjs entry.
+  readonly status: number;
+  readonly endpoint: string;
+  readonly body: unknown;
+  constructor(message: string, status: number, endpoint: string, body?: unknown) {
     super(message);
     this.name = "AgentClientError";
+    this.status = status;
+    this.endpoint = endpoint;
+    this.body = body;
   }
 }
 
@@ -238,6 +242,12 @@ export class AgentClient {
         headers: {
           authorization: `Bearer ${this.token}`,
           "content-type": "application/json",
+          // Close the socket immediately after the response so short-lived
+          // consumers (e.g. the Claude Code hook, where each event spawns
+          // a fresh process) don't leave undici keep-alive sockets behind.
+          // Without this, Node 25 on Windows aborts with a libuv
+          // UV_HANDLE_CLOSING assertion during teardown.
+          connection: "close",
         },
         body: JSON.stringify(stripUndefined(body)),
         signal: AbortSignal.timeout(this.timeoutMs),
