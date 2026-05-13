@@ -3,21 +3,21 @@
  *
  * apps/web's evals.runSuite mutation inserts an `eval_runs` row with
  * status='queued' and pg_notify's 'eval_run_pending'. This worker claims
- * those rows, marks them 'running', simulates the run, then writes the
- * outcome — also bumping eval_suites.pass_rate / delta / last_ran_at so
- * the dashboard reflects the latest result without a join on read.
+ * those rows, marks them 'running', iterates over the suite's enabled
+ * cases, calls the configured model for each prompt, scores the response
+ * against `expected_pattern` (regex), and writes per-case results into
+ * eval_case_results. Aggregates land on the eval_runs row and the suite's
+ * cached pass_rate / delta / last_ran_at fields.
  *
- * The simulation is deterministic given (suite_id, minute-bucket): a
- * pass_rate near the suite's baseline ±2%, 50–100% of cases run, and a
- * short delay so the running state is actually visible in the UI rather
- * than flashing past in <100ms.
- *
- * Real eval execution (calling the model, scoring, etc.) is a deep
- * rabbit hole — when it lands, only `simulateRun` changes.
+ * Real model calls happen when EVAL_ANTHROPIC_KEY / EVAL_OPENAI_KEY are
+ * configured (see eval-llm.ts). Without them, the worker falls back to
+ * a deterministic mock provider — same plumbing, no API spend, useful
+ * for the demo and CI.
  */
 
 import postgres, { type Sql } from "postgres";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { callModel, providerStatus } from "./eval-llm";
 
 const POLL_INTERVAL_MS = 10_000;
 const CLAIM_BATCH = 5;
@@ -25,8 +25,15 @@ const CLAIM_BATCH = 5;
 type QueuedRun = { id: string; suite_id: string };
 
 type SuiteSnapshot = {
+  model: string;
   baseline_pass_rate: number;
-  cases: number;
+};
+
+type CaseRow = {
+  id: string;
+  name: string;
+  prompt: string;
+  expected_pattern: string;
 };
 
 export async function startEvalTick(): Promise<() => Promise<void>> {
@@ -58,9 +65,12 @@ export async function startEvalTick(): Promise<() => Promise<void>> {
   });
 
   const interval = setInterval(() => void runTick(), POLL_INTERVAL_MS);
-  void runTick(); // catch up
+  void runTick();
 
-  console.log(`[realtime] eval run tick · poll ${POLL_INTERVAL_MS / 1000}s · batch ${CLAIM_BATCH}`);
+  const provs = providerStatus();
+  console.log(
+    `[realtime] eval run tick · poll ${POLL_INTERVAL_MS / 1000}s · batch ${CLAIM_BATCH} · anthropic=${provs.anthropic ? "on" : "off"} openai=${provs.openai ? "on" : "off"}`,
+  );
 
   return async () => {
     running = false;
@@ -97,7 +107,7 @@ async function runOne(sql: Sql, row: QueuedRun): Promise<void> {
   if (claimed.length === 0) return;
 
   const [suite] = await sql<SuiteSnapshot[]>`
-    SELECT baseline_pass_rate, cases FROM eval_suites WHERE id = ${row.suite_id}
+    SELECT model, baseline_pass_rate FROM eval_suites WHERE id = ${row.suite_id}
   `;
   if (!suite) {
     await sql`
@@ -108,72 +118,96 @@ async function runOne(sql: Sql, row: QueuedRun): Promise<void> {
     return;
   }
 
-  const sim = simulateRun(row.suite_id, suite);
-  // Visible "running" state — keep brief so the operator sees the spinner
-  // but the demo doesn't drag.
-  await delay(sim.durationMs);
+  const cases = await sql<CaseRow[]>`
+    SELECT id, name, prompt, expected_pattern
+    FROM eval_cases
+    WHERE suite_id = ${row.suite_id} AND enabled = true
+    ORDER BY id
+  `;
 
-  const finalStatus = sim.pass_rate >= suite.baseline_pass_rate - 0.05 ? "passed" : "failed";
+  if (cases.length === 0) {
+    await sql`
+      UPDATE eval_runs
+      SET status = 'error',
+          finished_at = now(),
+          error = 'no enabled cases for suite'
+      WHERE id = ${row.id}
+    `;
+    return;
+  }
+
+  let passed = 0;
+  let totalCostUsd = 0;
+  for (const c of cases) {
+    const call = await callModel({ model: suite.model, prompt: c.prompt });
+    const ok = call.error ? false : matchesExpected(call.text, c.expected_pattern);
+    if (ok) passed += 1;
+    totalCostUsd += call.cost_usd;
+
+    await sql`
+      INSERT INTO eval_case_results
+        (id, run_id, case_id, passed, output, latency_ms, cost_usd, error)
+      VALUES
+        (${`ecr_${randomUUID().replace(/-/g, "").slice(0, 16)}`},
+         ${row.id},
+         ${c.id},
+         ${ok},
+         ${truncate(call.text, 1024)},
+         ${call.latency_ms},
+         ${call.cost_usd},
+         ${call.error ?? null})
+    `;
+  }
+
+  const pass_rate = Number((passed / cases.length).toFixed(4));
+  const finalStatus = pass_rate >= suite.baseline_pass_rate - 0.05 ? "passed" : "failed";
 
   await sql`
     UPDATE eval_runs
     SET status = ${finalStatus},
         finished_at = now(),
-        pass_rate = ${sim.pass_rate},
-        cases_run = ${sim.cases_run}
+        pass_rate = ${pass_rate},
+        cases_run = ${cases.length}
     WHERE id = ${row.id}
   `;
 
-  const delta = sim.pass_rate - suite.baseline_pass_rate;
+  const delta = pass_rate - suite.baseline_pass_rate;
   const suiteStatus =
     delta < -0.05 ? "bad" : delta < -0.02 ? "warn" : "ok";
 
   await sql`
     UPDATE eval_suites
-    SET pass_rate = ${sim.pass_rate},
+    SET pass_rate = ${pass_rate},
         delta = ${delta},
         last_ran_at = now(),
         status = ${suiteStatus}
     WHERE id = ${row.suite_id}
   `;
+
+  // totalCostUsd is computed but not stored at the run level today — it'd
+  // need a column. Useful for the future budget tie-in.
+  void totalCostUsd;
 }
 
-/**
- * Deterministic-ish simulator: same suite within the same wall-clock minute
- * produces the same result. Pass-rate clamped to baseline ± 2.5%, with a
- * small minute-bucket drift so re-running the same suite over time produces
- * a moving needle.
- */
-function simulateRun(
-  suite_id: string,
-  suite: SuiteSnapshot,
-): { pass_rate: number; cases_run: number; durationMs: number } {
-  const minute = Math.floor(Date.now() / 60_000);
-  const seedHex = createHash("sha256").update(`${suite_id}:${minute}`).digest("hex");
-  // Take two bytes for a deterministic float in [0,1).
-  const u1 = parseInt(seedHex.slice(0, 4), 16) / 0xffff;
-  const u2 = parseInt(seedHex.slice(4, 8), 16) / 0xffff;
-
-  // Pass-rate noise: ±2.5% around baseline
-  const noise = (u1 - 0.5) * 0.05;
-  const pass_rate = clamp01(suite.baseline_pass_rate + noise);
-
-  // Run anywhere from 60% to 100% of declared cases
-  const cases_run = Math.max(1, Math.round(suite.cases * (0.6 + u2 * 0.4)));
-
-  // Simulated run duration: 2-6s so the running state is actually visible
-  const durationMs = 2000 + Math.floor(u2 * 4000);
-
-  return { pass_rate, cases_run, durationMs };
+function matchesExpected(text: string, pattern: string): boolean {
+  try {
+    return new RegExp(pattern, "i").test(text);
+  } catch {
+    // Bad pattern in the seed → treat as failure rather than error so the
+    // suite still completes. The case-result row's `output` shows what we
+    // got and the operator can fix the pattern.
+    return false;
+  }
 }
 
-function clamp01(n: number): number {
-  if (!Number.isFinite(n)) return 0;
-  if (n < 0) return 0;
-  if (n > 1) return 1;
-  return Number(n.toFixed(4));
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Cheap deterministic hash export — useful if a callsite ever wants to
+ *  derive a stable seed without re-implementing it. Currently unused at
+ *  the module level; kept since other ticks have analogous helpers. */
+export function deterministicHash(seed: string): string {
+  return createHash("sha256").update(seed).digest("hex").slice(0, 16);
 }

@@ -343,6 +343,57 @@ export const eval_runs = pgTable(
   }),
 );
 
+/**
+ * Individual cases within an eval suite. The worker iterates over the
+ * enabled rows when running a suite, calls the model with `prompt`, and
+ * scores the response against `expected_pattern` (regex). Results land
+ * in eval_case_results so the operator can drill into pass/fail per case.
+ */
+export const eval_cases = pgTable(
+  "eval_cases",
+  {
+    id: text("id").primaryKey(),
+    suite_id: text("suite_id")
+      .notNull()
+      .references(() => eval_suites.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    prompt: text("prompt").notNull(),
+    /** JS-flavored regex matched against the model's response text. */
+    expected_pattern: text("expected_pattern").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_suite: index("eval_cases_suite_idx").on(t.suite_id),
+  }),
+);
+
+/**
+ * One row per case execution within a run. `output` is capped to a
+ * reasonable display length — full transcripts would balloon the table.
+ */
+export const eval_case_results = pgTable(
+  "eval_case_results",
+  {
+    id: text("id").primaryKey(),
+    run_id: text("run_id")
+      .notNull()
+      .references(() => eval_runs.id, { onDelete: "cascade" }),
+    case_id: text("case_id")
+      .notNull()
+      .references(() => eval_cases.id, { onDelete: "cascade" }),
+    passed: boolean("passed").notNull(),
+    output: text("output").notNull().default(""),
+    latency_ms: integer("latency_ms").notNull().default(0),
+    cost_usd: doublePrecision("cost_usd").notNull().default(0),
+    error: text("error"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_run: index("eval_case_results_run_idx").on(t.run_id),
+  }),
+);
+
 export const eval_regressions = pgTable("eval_regressions", {
   id: text("id").primaryKey(),
   suite_id: text("suite_id").notNull().references(() => eval_suites.id, { onDelete: "cascade" }),

@@ -164,9 +164,46 @@ export const evalsRouter = router({
     }),
 
   /**
+   * Per-case results for one run — drives the expand-a-run drill-down.
+   * Joins eval_case_results onto eval_cases so the UI gets case names +
+   * prompts without a second round-trip.
+   */
+  caseResults: protectedProcedure
+    .input(z.object({ run_id: z.string().min(1).max(120) }))
+    .query(async ({ input }) => {
+      const rows = await db
+        .select({
+          id: schema.eval_case_results.id,
+          case_id: schema.eval_case_results.case_id,
+          case_name: schema.eval_cases.name,
+          case_prompt: schema.eval_cases.prompt,
+          passed: schema.eval_case_results.passed,
+          output: schema.eval_case_results.output,
+          latency_ms: schema.eval_case_results.latency_ms,
+          cost_usd: schema.eval_case_results.cost_usd,
+          error: schema.eval_case_results.error,
+        })
+        .from(schema.eval_case_results)
+        .innerJoin(schema.eval_cases, eq(schema.eval_case_results.case_id, schema.eval_cases.id))
+        .where(eq(schema.eval_case_results.run_id, input.run_id))
+        .orderBy(schema.eval_case_results.created_at);
+      return rows.map((r) => ({
+        id: r.id,
+        case_id: r.case_id,
+        case_name: r.case_name,
+        case_prompt: r.case_prompt,
+        passed: r.passed,
+        output: r.output,
+        latency_ms: r.latency_ms,
+        cost_usd: r.cost_usd,
+        error: r.error,
+      }));
+    }),
+
+  /**
    * Queue a real eval run. The realtime worker (apps/realtime/eval-tick.ts)
-   * picks the row up, simulates execution, and updates the suite's cached
-   * pass_rate / last_ran_at when done.
+   * iterates the suite's enabled cases, calls the configured model for
+   * each, scores against expected_pattern, and writes per-case results.
    */
   runSuite: analystProcedure
     .input(z.object({ suite_id: z.string().min(1).max(120) }))

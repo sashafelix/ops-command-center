@@ -113,6 +113,12 @@ services:
       # body and sent in the x-ops-signature header. Receivers verify with
       # the same secret. If unset, deliveries are sent unsigned.
       WEBHOOK_SECRET: "${WEBHOOK_SECRET:-}"
+      # Eval execution credentials — when set, eval-tick calls the real
+      # model APIs and scores responses against eval_cases.expected_pattern.
+      # Unset both → deterministic mock provider (no API spend, full plumbing
+      # still exercised). Set one or the other based on suite.model.
+      EVAL_ANTHROPIC_KEY: "${EVAL_ANTHROPIC_KEY:-}"
+      EVAL_OPENAI_KEY: "${EVAL_OPENAI_KEY:-}"
       # Service-DNS URL the realtime worker uses to call /api/sync/* on web.
       SYNC_WEB_URL: http://web:3000
     ports:
