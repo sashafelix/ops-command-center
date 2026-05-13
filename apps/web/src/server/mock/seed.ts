@@ -1081,26 +1081,30 @@ export const seed: Seed = {
         { k: "bot_token", label: "Bot token", type: "secret", value: "env:SLACK_BOT_TOKEN" },
       ], last_sync: "—", health: "warn" },
 
-      // Stub-only connectors — no client code exists yet. They render as
-      // "stub" in the UI with no Test button until someone implements the
-      // connector. Field shape is best-effort so the cards aren't blank.
-      { id: "pagerduty",  name: "PagerDuty",        category: "Notifications",    status: "stub", detail: "connector not yet implemented", fields: [
-        { k: "service_key", label: "Service key", type: "secret", value: "env:PAGERDUTY_SERVICE_KEY" },
+      // All connectors below are real (each has its own *.ts under
+      // server/connectors). Seeded rows start in "unverified" with sensible
+      // defaults; the operator runs Test from the UI to validate.
+      { id: "pagerduty", name: "PagerDuty", category: "Notifications", status: "unverified", detail: "set REST API token to connect", fields: [
+        { k: "api_token",          label: "REST API token",      type: "secret", value: "env:PAGERDUTY_API_TOKEN" },
+        { k: "events_routing_key", label: "Events routing key",  type: "secret", value: "env:PAGERDUTY_EVENTS_KEY" },
       ], last_sync: "—", health: "warn" },
-      { id: "vault",      name: "HashiCorp Vault",  category: "Secrets",          status: "stub", detail: "connector not yet implemented", fields: [
+      { id: "vault", name: "HashiCorp Vault", category: "Secrets", status: "unverified", detail: "set address + token to connect", fields: [
         { k: "addr",  label: "Address", type: "url",    value: "https://vault.internal" },
         { k: "token", label: "Token",   type: "secret", value: "env:VAULT_TOKEN" },
       ], last_sync: "—", health: "warn" },
-      { id: "datadog",    name: "Datadog",          category: "Observability",    status: "stub", detail: "connector not yet implemented", fields: [
+      { id: "datadog", name: "Datadog", category: "Observability", status: "unverified", detail: "set API key + site to connect", fields: [
+        { k: "site",    label: "Site",    type: "string", value: "datadoghq.com" },
         { k: "api_key", label: "API key", type: "secret", value: "env:DATADOG_API_KEY" },
       ], last_sync: "—", health: "warn" },
-      { id: "opensearch", name: "OpenSearch",       category: "Data",             status: "stub", detail: "connector not yet implemented", fields: [
-        { k: "host", label: "Host", type: "url", value: "" },
+      { id: "opensearch", name: "OpenSearch", category: "Data", status: "incomplete", detail: "set host to connect", fields: [
+        { k: "host",     label: "Host",     type: "url",    value: "" },
+        { k: "username", label: "Username", type: "string", value: "" },
+        { k: "password", label: "Password", type: "secret", value: "env:OPENSEARCH_PASSWORD" },
       ], last_sync: "—", health: "warn" },
-      { id: "stripe",     name: "Stripe",           category: "Billing",          status: "stub", detail: "connector not yet implemented", fields: [
+      { id: "stripe", name: "Stripe", category: "Billing", status: "unverified", detail: "set API key to connect", fields: [
         { k: "api_key", label: "API key", type: "secret", value: "env:STRIPE_API_KEY" },
       ], last_sync: "—", health: "warn" },
-      { id: "n8n",        name: "n8n automations",  category: "Automations",      status: "stub", detail: "connector not yet implemented", fields: [
+      { id: "n8n", name: "n8n automations", category: "Automations", status: "incomplete", detail: "set base URL + API key to connect", fields: [
         { k: "base_url",       label: "Base URL",       type: "url",    value: "" },
         { k: "api_key",        label: "API key",        type: "secret", value: "env:N8N_API_KEY" },
         { k: "webhook_secret", label: "Webhook secret", type: "secret", value: "env:N8N_WEBHOOK_SECRET" },
