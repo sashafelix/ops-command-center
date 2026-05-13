@@ -1,26 +1,35 @@
 import type { Connector } from "./types";
 import { anthropicConnector } from "./anthropic";
+import { datadogConnector } from "./datadog";
 import { githubConnector } from "./github";
-import { proxmoxConnector } from "./proxmox";
-import { openaiConnector } from "./openai";
-import { slackConnector } from "./slack";
 import { httpConnector } from "./http";
-import { STUB_CONNECTORS } from "./stubs";
+import { n8nConnector } from "./n8n";
+import { openaiConnector } from "./openai";
+import { opensearchConnector } from "./opensearch";
+import { pagerdutyConnector } from "./pagerduty";
+import { proxmoxConnector } from "./proxmox";
+import { slackConnector } from "./slack";
+import { stripeConnector } from "./stripe";
+import { vaultConnector } from "./vault";
 
 /**
  * Single source of truth: every connector type the workspace knows about,
- * keyed by id. Implemented connectors expose a real `test()`; stubs
- * report "stub — no connector implementation yet" so the UI can disable
- * the Test button but still allow configuration.
+ * keyed by id. All connectors are implemented — the previous stubs file
+ * is gone.
  */
 const ALL: Connector[] = [
   anthropicConnector,
+  datadogConnector,
   githubConnector,
-  proxmoxConnector,
-  openaiConnector,
-  slackConnector,
   httpConnector,
-  ...STUB_CONNECTORS,
+  n8nConnector,
+  openaiConnector,
+  opensearchConnector,
+  pagerdutyConnector,
+  proxmoxConnector,
+  slackConnector,
+  stripeConnector,
+  vaultConnector,
 ];
 
 export const CONNECTORS: Readonly<Record<string, Connector>> = Object.freeze(
