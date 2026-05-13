@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect } from "react";
-import { Check, X, Pencil, Pause, Clock, ArrowRight } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, X, Pencil, Pause, Clock, ArrowRight, Plus, Trash2, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
@@ -11,6 +11,11 @@ import { useCountdown, fmtCountdown } from "@/components/approvals/countdown";
 import { removeApprovalById } from "@/components/approvals/optimistic";
 import { useReauthGate } from "@/components/reauth/reauth-gate";
 import { cn } from "@/lib/utils";
+
+const POLICY_MODES = ["always-ask", "ask-once", "auto-approve", "ask-if-unsigned"] as const;
+type PolicyMode = (typeof POLICY_MODES)[number];
+
+type PolicyRow = { id: string; name: string; surface: string; mode: string; enabled: boolean };
 
 type Decision = "approve" | "deny" | "edit" | "snooze";
 
@@ -297,31 +302,255 @@ function Policies({
   items,
   loading,
 }: {
-  items: Array<{ id: string; name: string; surface: string; mode: string; enabled: boolean }>;
+  items: PolicyRow[];
   loading: boolean;
 }) {
+  const utils = trpc.useUtils();
+  const { requireFreshAuth } = useReauthGate();
+  const create = trpc.approvals.createPolicy.useMutation({
+    onSuccess: () => void utils.approvals.inbox.invalidate(),
+  });
+  const update = trpc.approvals.updatePolicy.useMutation({
+    onSuccess: () => void utils.approvals.inbox.invalidate(),
+  });
+  const toggle = trpc.approvals.togglePolicy.useMutation({
+    onSuccess: () => void utils.approvals.inbox.invalidate(),
+  });
+  const remove = trpc.approvals.deletePolicy.useMutation({
+    onSuccess: () => void utils.approvals.inbox.invalidate(),
+  });
+
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  async function onToggle(p: PolicyRow) {
+    const next = !p.enabled;
+    const ok = await requireFreshAuth(
+      `${next ? "Enable" : "Disable"} policy ${p.name}.`,
+    );
+    if (!ok) return;
+    toggle.mutate({ id: p.id, enabled: next });
+  }
+
+  async function onDelete(p: PolicyRow) {
+    const ok = await requireFreshAuth(
+      `Delete policy ${p.name}. Refused if any approvals reference it.`,
+    );
+    if (!ok) return;
+    remove.mutate({ id: p.id });
+  }
+
   return (
     <section>
-      <h3 className="font-mono text-[10.5px] tracking-widest uppercase text-fg-faint px-1 mb-2">
-        Policies
-      </h3>
+      <header className="flex items-center justify-between mb-2 px-1">
+        <h3 className="font-mono text-[10.5px] tracking-widest uppercase text-fg-faint">
+          Policies
+        </h3>
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="h-7 px-2 panel2 hover:border-line2 text-11 text-fg-muted hover:text-fg flex items-center gap-1"
+        >
+          <Plus size={11} aria-hidden /> New
+        </button>
+      </header>
+
+      {creating && (
+        <div className="panel p-3 mb-2">
+          <PolicyForm
+            busy={create.isPending}
+            error={create.error?.message ?? null}
+            onCancel={() => setCreating(false)}
+            onSave={async (values) => {
+              const ok = await requireFreshAuth(`Create policy ${values.name}.`);
+              if (!ok) return;
+              create.mutate(values, { onSuccess: () => setCreating(false) });
+            }}
+          />
+        </div>
+      )}
+
+      {(remove.error || update.error) && (
+        <div className="text-11 text-bad mb-2 px-1">
+          {remove.error?.message ?? update.error?.message}
+        </div>
+      )}
+
       {loading ? (
         <div className="panel">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-9 skel border-t first:border-t-0" aria-hidden />
           ))}
         </div>
+      ) : items.length === 0 ? (
+        <div className="panel p-4 text-12 text-fg-muted">
+          No policies yet. Click <span className="font-mono">New</span> above to create one.
+        </div>
       ) : (
         <ul className="panel divide-y">
-          {items.map((p) => (
-            <li key={p.id} className="px-3 py-2 flex items-center gap-2 text-12">
-              <StatusDot tone={p.enabled ? "ok" : "info"} label={p.name} />
-              <span className="text-fg-muted truncate flex-1 ml-2">{p.surface}</span>
-              <span className="font-mono text-11 text-fg-faint">{p.mode}</span>
-            </li>
-          ))}
+          {items.map((p) =>
+            editingId === p.id ? (
+              <li key={p.id} className="px-3 py-3">
+                <PolicyForm
+                  initial={p}
+                  busy={update.isPending && update.variables?.id === p.id}
+                  error={null}
+                  onCancel={() => setEditingId(null)}
+                  onSave={async (values) => {
+                    const ok = await requireFreshAuth(`Update policy ${p.name}.`);
+                    if (!ok) return;
+                    update.mutate(
+                      { id: p.id, ...values },
+                      { onSuccess: () => setEditingId(null) },
+                    );
+                  }}
+                />
+              </li>
+            ) : (
+              <li key={p.id} className="px-3 py-2 flex items-center gap-2 text-12">
+                <StatusDot tone={p.enabled ? "ok" : "info"} label={p.name} />
+                <span className="text-fg-muted truncate flex-1 ml-2">{p.surface}</span>
+                <span className="font-mono text-11 text-fg-faint w-32">{p.mode}</span>
+                <button
+                  type="button"
+                  onClick={() => void onToggle(p)}
+                  disabled={toggle.isPending && toggle.variables?.id === p.id}
+                  title={p.enabled ? "Disable policy" : "Enable policy"}
+                  className="h-6 px-1.5 panel2 hover:border-line2 text-11 text-fg-muted hover:text-fg flex items-center gap-1 disabled:opacity-50"
+                >
+                  {toggle.isPending && toggle.variables?.id === p.id ? (
+                    <Loader2 size={10} className="animate-spin" aria-hidden />
+                  ) : null}
+                  {p.enabled ? "Disable" : "Enable"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingId(p.id)}
+                  aria-label="Edit policy"
+                  title="Edit policy"
+                  className="h-6 w-6 inline-flex items-center justify-center text-fg-muted hover:text-fg"
+                >
+                  <Pencil size={11} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onDelete(p)}
+                  disabled={remove.isPending && remove.variables?.id === p.id}
+                  aria-label="Delete policy"
+                  title="Delete policy (refused if approvals reference it)"
+                  className="h-6 w-6 inline-flex items-center justify-center text-fg-faint hover:text-bad disabled:opacity-50"
+                >
+                  {remove.isPending && remove.variables?.id === p.id ? (
+                    <Loader2 size={10} className="animate-spin" aria-hidden />
+                  ) : (
+                    <Trash2 size={11} aria-hidden />
+                  )}
+                </button>
+              </li>
+            ),
+          )}
         </ul>
       )}
     </section>
+  );
+}
+
+function PolicyForm({
+  initial,
+  busy,
+  error,
+  onCancel,
+  onSave,
+}: {
+  initial?: PolicyRow;
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSave: (values: {
+    name: string;
+    surface: string;
+    mode: PolicyMode;
+    enabled: boolean;
+  }) => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [surface, setSurface] = useState(initial?.surface ?? "");
+  const [mode, setMode] = useState<PolicyMode>(
+    POLICY_MODES.includes((initial?.mode ?? "always-ask") as PolicyMode)
+      ? ((initial?.mode ?? "always-ask") as PolicyMode)
+      : "always-ask",
+  );
+  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+  const valid = name.trim().length > 0 && surface.trim().length > 0;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex flex-col gap-1">
+        <span className="text-11 text-fg-muted">Name</span>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Destructive bash"
+          autoFocus
+          className="h-7 panel2 bg-transparent px-2 text-12 text-fg outline-none focus:border-line2"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-11 text-fg-muted">Surface</span>
+        <input
+          type="text"
+          value={surface}
+          onChange={(e) => setSurface(e.target.value)}
+          placeholder="e.g. tool:bash, deploy.execute"
+          className="h-7 panel2 bg-transparent px-2 text-12 text-fg outline-none focus:border-line2"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-11 text-fg-muted">Mode</span>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as PolicyMode)}
+          className="h-7 panel2 bg-transparent px-2 text-12 text-fg outline-none focus:border-line2"
+        >
+          {POLICY_MODES.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex items-center gap-2 text-12">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+          className="accent-info"
+        />
+        <span className="text-fg-muted">Enabled</span>
+      </label>
+      {error && <p className="text-11 text-bad truncate">{error}</p>}
+      <div className="flex items-center gap-2 justify-end mt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="h-7 px-2 text-11 text-fg-muted hover:text-fg disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onSave({ name: name.trim(), surface: surface.trim(), mode, enabled })
+          }
+          disabled={!valid || busy}
+          className="h-7 px-2 panel2 hover:border-line2 text-11 text-fg flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {busy ? <Loader2 size={11} className="animate-spin" aria-hidden /> : <Check size={11} aria-hidden />}
+          Save
+        </button>
+      </div>
+    </div>
   );
 }
