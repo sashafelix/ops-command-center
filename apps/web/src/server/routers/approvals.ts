@@ -168,7 +168,147 @@ export const approvalsRouter = router({
 
       return { id: row.id, decision: input.decision };
     }),
+
+  // ===========================================================================
+  // Policies — CRUD. SRE+ (approval policy decisions live in the same
+  // privilege tier as deciding approvals themselves).
+  // ===========================================================================
+
+  createPolicy: sreProcedure
+    .input(
+      z.object({
+        id: z
+          .string()
+          .regex(/^[a-z0-9_-]+$/, "lowercase letters, digits, _ and - only")
+          .min(2)
+          .max(60)
+          .optional(),
+        name: z.string().min(1).max(120),
+        surface: z.string().min(1).max(120),
+        mode: z.enum(["always-ask", "ask-once", "auto-approve", "ask-if-unsigned"]),
+        enabled: z.boolean().default(true),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const id = input.id ?? `p_${slugify(input.name).slice(0, 40)}`;
+      const existing = await db
+        .select({ id: schema.policies.id })
+        .from(schema.policies)
+        .where(eq(schema.policies.id, id));
+      if (existing.length > 0) {
+        throw new TRPCError({ code: "CONFLICT", message: `policy id "${id}" already exists` });
+      }
+      await db.insert(schema.policies).values({
+        id,
+        name: input.name,
+        surface: input.surface,
+        mode: input.mode,
+        enabled: input.enabled,
+        owner_user_id: ctx.session.user.email ?? "unknown",
+      });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "policy.create",
+        target: `policy/${id}`,
+      });
+      return { ok: true as const, id };
+    }),
+
+  updatePolicy: sreProcedure
+    .input(
+      z.object({
+        id: z.string().min(1).max(120),
+        name: z.string().min(1).max(120).optional(),
+        surface: z.string().min(1).max(120).optional(),
+        mode: z.enum(["always-ask", "ask-once", "auto-approve", "ask-if-unsigned"]).optional(),
+        enabled: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const set: Record<string, unknown> = { updated_at: new Date() };
+      if (input.name !== undefined) set.name = input.name;
+      if (input.surface !== undefined) set.surface = input.surface;
+      if (input.mode !== undefined) set.mode = input.mode;
+      if (input.enabled !== undefined) set.enabled = input.enabled;
+      const updated = await db
+        .update(schema.policies)
+        .set(set)
+        .where(eq(schema.policies.id, input.id))
+        .returning({ id: schema.policies.id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "policy.update",
+        target: `policy/${input.id}`,
+      });
+      return { ok: true as const };
+    }),
+
+  togglePolicy: sreProcedure
+    .input(z.object({ id: z.string().min(1).max(120), enabled: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const updated = await db
+        .update(schema.policies)
+        .set({ enabled: input.enabled, updated_at: new Date() })
+        .where(eq(schema.policies.id, input.id))
+        .returning({ id: schema.policies.id });
+      if (updated.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: input.enabled ? "policy.enable" : "policy.disable",
+        target: `policy/${input.id}`,
+      });
+      return { ok: true as const, enabled: input.enabled };
+    }),
+
+  /**
+   * Delete a policy. Refuses if any approvals reference it — deleting
+   * would orphan rows and the policy_id is needed for audit traceability.
+   * Callers should disable instead.
+   */
+  deletePolicy: sreProcedure
+    .input(z.object({ id: z.string().min(1).max(120) }))
+    .mutation(async ({ input, ctx }) => {
+      await requireFreshAuth(ctx);
+      const [refs] = await db
+        .select({ c: sql<number>`count(*)::int` })
+        .from(schema.approvals)
+        .where(eq(schema.approvals.policy_id, input.id));
+      const refCount = refs?.c ?? 0;
+      if (refCount > 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `${refCount} approval${refCount === 1 ? "" : "s"} reference this policy — disable it instead of deleting`,
+        });
+      }
+      const removed = await db
+        .delete(schema.policies)
+        .where(eq(schema.policies.id, input.id))
+        .returning({ id: schema.policies.id });
+      if (removed.length === 0) throw new TRPCError({ code: "NOT_FOUND" });
+      await appendAuditEvent({
+        actor: ctx.session.user.email ?? "unknown",
+        role: "admin",
+        action: "policy.delete",
+        target: `policy/${input.id}`,
+      });
+      return { ok: true as const };
+    }),
 });
+
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60) || "policy";
+}
 
 function relTime(then: Date): string {
   const ms = Date.now() - then.getTime();
