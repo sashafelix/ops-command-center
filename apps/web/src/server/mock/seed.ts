@@ -481,6 +481,14 @@ export type Seed = {
   evals: {
     kpi: { suites: number; total_cases: number; passing: string; regressions: number; drift: string };
     suites: EvalSuiteRow[];
+    cases: Array<{
+      id: string;
+      suite_id: string;
+      name: string;
+      prompt: string;
+      expected_pattern: string;
+      enabled: boolean;
+    }>;
     regressions: EvalRegression[];
     ab: EvalAB;
   };
@@ -960,6 +968,40 @@ export const seed: Seed = {
       { id: "long-tail-suite",cases: 412, pass_rate: 0.917, delta: -0.022, last: "2 h ago",    baseline: 0.939, model: "sonnet-4.5", flake_rate: 0.041, status: "bad",  trend: [94,94,93,94,93,94,93,93,92,92,91,92,92,91] },
       { id: "policy-suite",   cases: 144, pass_rate: 0.999, delta:  0.000, last: "3 h ago",    baseline: 0.999, model: "sonnet-4.5", flake_rate: 0.001, status: "ok",   trend: [99,99,99,99,99,99,99,99,99,99,99,99,99,99] },
       { id: "trust-suite",    cases: 188, pass_rate: 0.972, delta: -0.001, last: "4 h ago",    baseline: 0.973, model: "sonnet-4.5", flake_rate: 0.011, status: "ok",   trend: [97,97,97,97,97,97,97,97,97,97,97,97,97,97] },
+    ],
+    cases: [
+      // auth-suite: response must mention the security-relevant action
+      { id: "ec_auth_1", suite_id: "auth-suite",    name: "rejects unauth GET on /admin",
+        prompt: "A GET /admin request arrives with no Authorization header. What should the middleware do?",
+        expected_pattern: "(401|reject|deny|unauthor)", enabled: true },
+      { id: "ec_auth_2", suite_id: "auth-suite",    name: "validates JWT signature",
+        prompt: "How should the middleware verify a JWT before trusting its claims?",
+        expected_pattern: "(verify|signature|RS256|HS256|public key)", enabled: true },
+      { id: "ec_auth_3", suite_id: "auth-suite",    name: "rotates refresh tokens",
+        prompt: "When a refresh token is used, what should happen to it?",
+        expected_pattern: "(rotat|invalidat|revok|new token)", enabled: true },
+
+      // billing-suite: numeric / rounding behaviour
+      { id: "ec_bill_1", suite_id: "billing-suite", name: "rejects negative amounts",
+        prompt: "What status code do you return when a charge request has amount = -50?",
+        expected_pattern: "(400|invalid|bad request|negative)", enabled: true },
+      { id: "ec_bill_2", suite_id: "billing-suite", name: "rounds half-cents up",
+        prompt: "Stripe expects integer cents. How do you round 12.345 USD before sending?",
+        expected_pattern: "(1235|round|ceil|half-up)", enabled: true },
+      { id: "ec_bill_3", suite_id: "billing-suite", name: "handles refund > charge",
+        prompt: "What happens if a refund is requested for more than the original charge?",
+        expected_pattern: "(refus|reject|cannot|400|invalid)", enabled: true },
+
+      // search-suite: query behaviour
+      { id: "ec_sr_1", suite_id: "search-suite",   name: "returns empty array on empty query",
+        prompt: "An empty query string hits /search. What does the response body look like?",
+        expected_pattern: "(\\[\\]|empty|no results|results.*0)", enabled: true },
+      { id: "ec_sr_2", suite_id: "search-suite",   name: "respects k parameter",
+        prompt: "A request to /search?q=foo&k=5 — how many results should come back at most?",
+        expected_pattern: "(5|five|k|top-k)", enabled: true },
+      { id: "ec_sr_3", suite_id: "search-suite",   name: "filters by tenant_id",
+        prompt: "What's the most important filter to apply on a search query in a multi-tenant system?",
+        expected_pattern: "(tenant|workspace|org|scope)", enabled: true },
     ],
     regressions: [
       { id: "r_412", suite: "auth-suite",       case: "rotates session id mid-request",   model: "sonnet-4.5", first_fail: "12 min ago", occurrences: 2, owner: "platform", commit: "b8c41e7" },

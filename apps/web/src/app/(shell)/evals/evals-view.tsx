@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Loader2 } from "lucide-react";
+import { Play, Loader2, ChevronRight } from "lucide-react";
 import { trpc } from "@/lib/trpc/client";
 import type { RouterOutputs } from "@/lib/trpc/types";
 import { KpiCard } from "@/components/kpi-card";
@@ -204,42 +204,9 @@ export function EvalsView({ initial }: { initial: RouterOutputs["evals"]["overvi
           <div className="panel p-4 text-12 text-fg-muted">No runs yet.</div>
         ) : (
           <div className="panel divide-y">
-            {(recentRuns.data ?? []).map((r) => {
-              const tone =
-                r.status === "passed"
-                  ? "text-ok"
-                  : r.status === "failed" || r.status === "error"
-                    ? "text-bad"
-                    : "text-warn";
-              const elapsedMs =
-                r.finished_at && r.started_at
-                  ? Date.parse(r.finished_at) - Date.parse(r.started_at)
-                  : null;
-              return (
-                <div key={r.id} className="px-3 py-2 grid grid-cols-12 items-center gap-2 text-12">
-                  <span className={cn("col-span-2 font-mono", tone)}>
-                    {r.status === "queued" || r.status === "running" ? (
-                      <Loader2 size={11} className="inline animate-spin mr-1" aria-hidden />
-                    ) : null}
-                    {r.status}
-                  </span>
-                  <span className="col-span-2 font-mono text-fg-muted truncate">{r.suite_id}</span>
-                  <span className="col-span-3 font-mono text-fg-faint truncate">{r.started_by}</span>
-                  <span className="col-span-2 text-right font-mono text-fg num">
-                    {r.pass_rate != null ? `${(r.pass_rate * 100).toFixed(1)}%` : "—"}
-                  </span>
-                  <span className="col-span-1 text-right font-mono text-fg-muted num">
-                    {r.cases_run != null ? r.cases_run : "—"}
-                  </span>
-                  <span className="col-span-1 text-right font-mono text-fg-faint num">
-                    {elapsedMs != null ? `${(elapsedMs / 1000).toFixed(1)}s` : "—"}
-                  </span>
-                  <span className="col-span-1 text-right font-mono text-11 text-fg-faint">
-                    {relTime(r.created_at)}
-                  </span>
-                </div>
-              );
-            })}
+            {(recentRuns.data ?? []).map((r) => (
+              <RunRow key={r.id} run={r} />
+            ))}
           </div>
         )}
       </section>
@@ -318,4 +285,117 @@ function relTime(iso: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h} h ago`;
   return `${Math.floor(h / 24)} d ago`;
+}
+
+type RecentRun = RouterOutputs["evals"]["recentRuns"][number];
+
+function RunRow({ run: r }: { run: RecentRun }) {
+  const [expanded, setExpanded] = useState(false);
+  const tone =
+    r.status === "passed"
+      ? "text-ok"
+      : r.status === "failed" || r.status === "error"
+        ? "text-bad"
+        : "text-warn";
+  const elapsedMs =
+    r.finished_at && r.started_at ? Date.parse(r.finished_at) - Date.parse(r.started_at) : null;
+  // Don't offer to expand runs that haven't produced case rows yet.
+  const expandable = r.status === "passed" || r.status === "failed";
+  return (
+    <div>
+      <div className="px-3 py-2 grid grid-cols-12 items-center gap-2 text-12">
+        <span className="col-span-1 flex items-center">
+          {expandable ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Hide cases" : "Show cases"}
+              className="h-6 w-6 inline-flex items-center justify-center text-fg-faint hover:text-fg"
+            >
+              <ChevronRight
+                size={12}
+                aria-hidden
+                className={cn("transition-transform", expanded && "rotate-90")}
+              />
+            </button>
+          ) : (
+            <span className="inline-block w-6" aria-hidden />
+          )}
+          <span className={cn("font-mono", tone)}>
+            {r.status === "queued" || r.status === "running" ? (
+              <Loader2 size={11} className="inline animate-spin mr-1" aria-hidden />
+            ) : null}
+            {r.status}
+          </span>
+        </span>
+        <span className="col-span-2 font-mono text-fg-muted truncate">{r.suite_id}</span>
+        <span className="col-span-3 font-mono text-fg-faint truncate">{r.started_by}</span>
+        <span className="col-span-2 text-right font-mono text-fg num">
+          {r.pass_rate != null ? `${(r.pass_rate * 100).toFixed(1)}%` : "—"}
+        </span>
+        <span className="col-span-1 text-right font-mono text-fg-muted num">
+          {r.cases_run != null ? r.cases_run : "—"}
+        </span>
+        <span className="col-span-1 text-right font-mono text-fg-faint num">
+          {elapsedMs != null ? `${(elapsedMs / 1000).toFixed(1)}s` : "—"}
+        </span>
+        <span className="col-span-2 text-right font-mono text-11 text-fg-faint">
+          {relTime(r.created_at)}
+        </span>
+      </div>
+      {expanded && <CaseResultsPanel runId={r.id} />}
+    </div>
+  );
+}
+
+function CaseResultsPanel({ runId }: { runId: string }) {
+  const q = trpc.evals.caseResults.useQuery({ run_id: runId });
+  if (q.isLoading) {
+    return (
+      <div className="px-3 pb-3 pt-1 text-11 text-fg-faint flex items-center gap-2">
+        <Loader2 size={11} className="animate-spin" aria-hidden /> loading cases…
+      </div>
+    );
+  }
+  const rows = q.data ?? [];
+  if (rows.length === 0) {
+    return (
+      <div className="px-3 pb-3 pt-1 text-11 text-fg-faint">
+        No case rows recorded for this run.
+      </div>
+    );
+  }
+  return (
+    <div className="px-3 pb-3 pt-1 border-t bg-[var(--bg-1)]">
+      <div className="font-mono text-[10.5px] tracking-widest uppercase text-fg-faint mb-2">
+        Cases
+      </div>
+      <ul className="flex flex-col gap-1">
+        {rows.map((r) => (
+          <li key={r.id} className="grid grid-cols-12 gap-2 items-baseline text-11">
+            <span
+              className={cn(
+                "col-span-1 font-mono",
+                r.passed ? "text-ok" : "text-bad",
+              )}
+            >
+              {r.passed ? "✓ pass" : "✗ fail"}
+            </span>
+            <span className="col-span-3 text-fg truncate" title={r.case_prompt}>
+              {r.case_name}
+            </span>
+            <span className="col-span-5 font-mono text-fg-muted truncate" title={r.output}>
+              {r.error ? <span className="text-bad">err · {r.error}</span> : r.output}
+            </span>
+            <span className="col-span-1 text-right font-mono text-fg-faint num">
+              {r.latency_ms}ms
+            </span>
+            <span className="col-span-2 text-right font-mono text-fg-faint num">
+              {r.cost_usd > 0 ? `$${r.cost_usd.toFixed(4)}` : "—"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

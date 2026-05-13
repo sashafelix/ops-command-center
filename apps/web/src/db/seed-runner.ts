@@ -58,7 +58,7 @@ async function main() {
       service_load, slos, incidents, deploys, services, regions,
       status_signals, status_incidents, status_page_meta,
       signing_keys, agent_versions,
-      eval_runs, eval_regressions, eval_suites, eval_ab,
+      eval_case_results, eval_cases, eval_runs, eval_regressions, eval_suites, eval_ab,
       budget_breaches, budgets, budget_meta,
       ad_hoc_reports, scheduled_reports, compliance_bundles,
       webhook_deliveries, webhooks, tokens, members, connections, prefs, workspace,
@@ -344,6 +344,16 @@ async function main() {
         status: s.status,
         trend: s.trend,
         last_ran_at: new Date(Date.now() - 12 * 60 * 1000),
+      });
+    }
+    for (const c of MOCK.evals.cases) {
+      await tx.insert(schema.eval_cases).values({
+        id: c.id,
+        suite_id: c.suite_id,
+        name: c.name,
+        prompt: c.prompt,
+        expected_pattern: c.expected_pattern,
+        enabled: c.enabled,
       });
     }
     for (const r of MOCK.evals.regressions) {
