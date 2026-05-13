@@ -2,7 +2,6 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db/client";
 import { ingestHandler } from "../../_runner";
-import { recomputeLiveBoard, recomputeLiveKpi } from "@/server/kv-recompute";
 import { notify } from "@/server/pg-notify";
 
 const Input = z.object({
@@ -54,7 +53,6 @@ export const POST = ingestHandler({
         },
       });
 
-    await Promise.all([recomputeLiveKpi(), recomputeLiveBoard()]);
     await notify("sessions", { kind: "started", id: i.id });
 
     const [row] = await db

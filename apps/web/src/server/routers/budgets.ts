@@ -1,31 +1,37 @@
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, adminProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
-import { kvGet } from "@/db/kv";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
 
-type TopRun = {
-  id: string;
-  goal: string;
-  agent: string;
-  cost_usd: number;
-  duration: string;
-  when: string;
-  status: "ok" | "warn" | "bad" | "aborted";
-};
-
 export const budgetsRouter = router({
   overview: protectedProcedure.query(async () => {
-    const [meta, teams, breaches, top_runs] = await Promise.all([
+    const since30d = sql`now() - interval '30 days'`;
+    const [meta, teams, breaches, topRows] = await Promise.all([
       db.select().from(schema.budget_meta).where(eq(schema.budget_meta.id, "default")),
       db.select().from(schema.budgets).orderBy(schema.budgets.id),
       db.select().from(schema.budget_breaches).orderBy(desc(schema.budget_breaches.when)),
-      kvGet<TopRun[]>("budgets.top_runs", []),
+      // Top-cost sessions in the last 30d. Limited to 8 for the panel.
+      db
+        .select()
+        .from(schema.sessions)
+        .where(gte(schema.sessions.started_at, since30d))
+        .orderBy(desc(schema.sessions.cost_usd))
+        .limit(8),
     ]);
     const m = meta[0];
+
+    const top_runs = topRows.map((r) => ({
+      id: r.id,
+      goal: r.goal,
+      agent: r.agent_version,
+      cost_usd: r.cost_usd,
+      duration: fmtDuration(r.runtime_s),
+      when: relTime(r.started_at),
+      status: r.outcome === "aborted" ? ("aborted" as const) : (r.status as "ok" | "warn" | "bad"),
+    }));
 
     return {
       kpi: {
@@ -145,3 +151,22 @@ export const budgetsRouter = router({
       return { ok: true as const };
     }),
 });
+
+function fmtDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function relTime(then: Date): string {
+  const ms = Date.now() - then.getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.floor(h / 24)} d ago`;
+}

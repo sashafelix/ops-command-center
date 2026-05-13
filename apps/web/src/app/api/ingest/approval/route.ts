@@ -2,7 +2,6 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db, schema } from "@/db/client";
 import { ingestHandler } from "../_runner";
-import { recomputeApprovalsCounts } from "@/server/kv-recompute";
 import { notify } from "@/server/pg-notify";
 
 const Input = z.object({
@@ -47,7 +46,6 @@ export const POST = ingestHandler({
       },
     });
 
-    await recomputeApprovalsCounts();
     await notify("notifications", { kind: "approval.request", id, severity: i.severity });
 
     return { ok: true, id, auto_deny_at: auto_deny_at.toISOString() };

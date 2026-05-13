@@ -1072,15 +1072,18 @@ export const seed: Seed = {
         { k: "token",    label: "Token",     type: "secret", value: "env:PROXMOX_TOKEN" },
       ], last_sync: "—", health: "warn" },
 
+      // Newly-real connectors (graduated from stubs in this PR).
+      { id: "openai", name: "OpenAI API", category: "Model providers", status: "unverified", detail: "set API key to connect", fields: [
+        { k: "base_url", label: "Base URL", type: "url",    value: "https://api.openai.com/v1" },
+        { k: "api_key",  label: "API key",  type: "secret", value: "env:OPENAI_API_KEY" },
+      ], last_sync: "—", health: "warn" },
+      { id: "slack", name: "Slack", category: "Notifications", status: "unverified", detail: "set bot token to connect", fields: [
+        { k: "bot_token", label: "Bot token", type: "secret", value: "env:SLACK_BOT_TOKEN" },
+      ], last_sync: "—", health: "warn" },
+
       // Stub-only connectors — no client code exists yet. They render as
       // "stub" in the UI with no Test button until someone implements the
       // connector. Field shape is best-effort so the cards aren't blank.
-      { id: "openai",     name: "OpenAI API",       category: "Model providers",  status: "stub", detail: "connector not yet implemented", fields: [
-        { k: "api_key", label: "API key", type: "secret", value: "env:OPENAI_API_KEY" },
-      ], last_sync: "—", health: "warn" },
-      { id: "slack",      name: "Slack",            category: "Notifications",    status: "stub", detail: "connector not yet implemented", fields: [
-        { k: "bot_token", label: "Bot token", type: "secret", value: "env:SLACK_BOT_TOKEN" },
-      ], last_sync: "—", health: "warn" },
       { id: "pagerduty",  name: "PagerDuty",        category: "Notifications",    status: "stub", detail: "connector not yet implemented", fields: [
         { k: "service_key", label: "Service key", type: "secret", value: "env:PAGERDUTY_SERVICE_KEY" },
       ], last_sync: "—", health: "warn" },

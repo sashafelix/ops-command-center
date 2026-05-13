@@ -1,9 +1,8 @@
 import { TRPCError } from "@trpc/server";
-import { eq, isNull, desc, sql, and, gte, inArray } from "drizzle-orm";
+import { eq, isNull, isNotNull, desc, sql, and, gte, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { protectedProcedure, sreProcedure, router } from "../trpc";
 import { db, schema } from "@/db/client";
-import { kvGet, kvSet } from "@/db/kv";
 import { requireFreshAuth } from "../reauth";
 import { appendAuditEvent } from "../audit-append";
 
@@ -24,7 +23,7 @@ export const approvalsRouter = router({
   /** Inbox payload — pending queue + recent verdicts + policies + counts. */
   inbox: protectedProcedure.query(async () => {
     const since24h = sql`now() - interval '24 hours'`;
-    const [queueRows, policyRows, recent, pending, autoApproved24h, blocked24h] =
+    const [queueRows, policyRows, recentRows, pending, autoApproved24h, blocked24h] =
       await Promise.all([
         db
           .select()
@@ -32,7 +31,15 @@ export const approvalsRouter = router({
           .where(isNull(schema.approvals.decided_at))
           .orderBy(desc(schema.approvals.requested_at)),
         db.select().from(schema.policies).orderBy(schema.policies.name),
-        kvGet<RecentVerdict[]>("approvals.recent", []),
+        // Recent verdicts: 8 most-recently-decided approvals from the DB.
+        // Replaces the previous KV mirror that the decide mutation had to
+        // hand-maintain. Single source of truth.
+        db
+          .select()
+          .from(schema.approvals)
+          .where(isNotNull(schema.approvals.decided_at))
+          .orderBy(desc(schema.approvals.decided_at))
+          .limit(8),
         db
           .select({ c: sql<number>`count(*)::int` })
           .from(schema.approvals)
@@ -87,7 +94,24 @@ export const approvalsRouter = router({
           of: (extra.of ?? 1) as number,
         };
       }),
-      recent,
+      recent: recentRows.map((r): RecentVerdict => {
+        const verdict =
+          r.decision === "approve"
+            ? "approved"
+            : r.decision === "deny"
+              ? "denied"
+              : r.decision === "edit"
+                ? "edited"
+                : "expired";
+        return {
+          id: r.id,
+          verdict,
+          by: r.approver_user_id ?? "auto",
+          when: relTime(r.decided_at ?? r.requested_at),
+          what: (r.edited_command ?? r.command).slice(0, 60),
+          session_id: r.session_id,
+        };
+      }),
       policies: policyRows.map((p) => ({
         id: p.id,
         name: p.name,
@@ -135,17 +159,6 @@ export const approvalsRouter = router({
         })
         .where(eq(schema.approvals.id, input.id));
 
-      const recent = await kvGet<RecentVerdict[]>("approvals.recent", []);
-      recent.unshift({
-        id: row.id,
-        verdict: m.verdict,
-        by: ctx.session.user.email ?? "unknown",
-        when: "just now",
-        what: input.edited_command ?? row.command.slice(0, 60),
-        session_id: row.session_id,
-      });
-      await kvSet("approvals.recent", recent.slice(0, 8));
-
       await appendAuditEvent({
         actor: ctx.session.user.email ?? "unknown",
         role: "admin",
@@ -156,3 +169,15 @@ export const approvalsRouter = router({
       return { id: row.id, decision: input.decision };
     }),
 });
+
+function relTime(then: Date): string {
+  const ms = Date.now() - then.getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ago`;
+  return `${Math.floor(h / 24)} d ago`;
+}
