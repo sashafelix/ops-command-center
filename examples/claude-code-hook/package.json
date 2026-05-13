@@ -1,0 +1,12 @@
+{
+  "name": "@ops/claude-code-hook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ops-claude-hook": "./bin/hook.mjs"
+  },
+  "dependencies": {
+    "@ops/agent-client": "workspace:*"
+  }
+}

@@ -176,6 +176,12 @@ importers:
         specifier: ^2.1.4
         version: 2.1.9(@types/node@20.19.40)(happy-dom@15.11.7)(jsdom@25.0.1)
 
+  examples/claude-code-hook:
+    dependencies:
+      '@ops/agent-client':
+        specifier: workspace:*
+        version: link:../../packages/agent-client
+
   examples/demo-agent:
     dependencies:
       '@ops/agent-client':
