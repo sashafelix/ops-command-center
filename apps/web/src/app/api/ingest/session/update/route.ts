@@ -14,6 +14,10 @@ const Input = z.object({
   trust_score: z.number().min(0).max(1).optional(),
   status: z.enum(["ok", "warn", "bad", "idle"]).optional(),
   step: z.string().optional(),
+  // Allow the goal to be refined after start — e.g. the Claude Code hook
+  // opens a session with a placeholder goal at SessionStart, then patches
+  // it with the actual first prompt on UserPromptSubmit.
+  goal: z.string().min(1).max(2000).optional(),
 });
 
 export const POST = ingestHandler({
@@ -28,6 +32,7 @@ export const POST = ingestHandler({
     if (i.tool_calls !== undefined) set.tool_calls = i.tool_calls;
     if (i.trust_score !== undefined) set.trust_score = i.trust_score;
     if (i.status !== undefined) set.status = i.status;
+    if (i.goal !== undefined) set.goal = i.goal;
     if (i.step !== undefined) {
       // Patch the step into the extra blob without clobbering siblings.
       set.extra = (

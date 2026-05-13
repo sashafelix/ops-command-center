@@ -83,6 +83,8 @@ export type UpdateSessionInput = {
   status?: "ok" | "warn" | "bad" | "idle";
   /** Human-readable "what's the agent doing now" line — shown on NOW PLAYING. */
   step?: string;
+  /** Refine the session goal after start (e.g. once the first user prompt is known). */
+  goal?: string;
 };
 
 export type ToolCallInput = {

@@ -33,7 +33,7 @@
 import { createAgent, AgentClientError } from "@ops/agent-client";
 import { mkdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import http from "node:http";
 import https from "node:https";
 import { URL } from "node:url";
@@ -248,8 +248,16 @@ async function onUserPromptSubmit(event, state, statePath) {
   const prompt = truncate(String(event.prompt ?? "").trim(), 200);
   if (!prompt) return;
   state.lastStep = `prompt · ${prompt}`;
+  // First prompt of the session becomes the goal — the SessionStart hook
+  // fires before Claude Code knows what the user wants, so we patch the
+  // placeholder goal here as soon as we have a real prompt.
+  const update = { step: state.lastStep };
+  if (!state.goalSet) {
+    update.goal = prompt;
+    state.goalSet = true;
+  }
   saveState(statePath, state);
-  await agent.updateSession(sessionId, { step: state.lastStep });
+  await agent.updateSession(sessionId, update);
 }
 
 async function onSessionEnd(event, state, statePath) {
@@ -311,10 +319,70 @@ function derivToolName(event) {
 }
 
 function guessRepo(cwd) {
-  // Cheap heuristic — use the last two path segments. Good enough for
-  // a label; the operator can rename via Sessions later if it matters.
-  const parts = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
-  return parts.length >= 2 ? `${parts[parts.length - 2]}/${parts[parts.length - 1]}` : cwd;
+  // Best signal: the git remote URL — gives a stable identifier even
+  // across machines and parent-dir differences. Walk up looking for a
+  // .git/config, parse [remote "origin"] → url, normalize to a
+  // "host/owner/repo" form.
+  const fromGit = readGitOrigin(cwd);
+  if (fromGit) return fromGit;
+  // Fallback: the cwd's leaf directory. Avoids the old bug where a
+  // Windows path like "C:\\Projects\\ops-command-center" yielded
+  // "Projects/ops-command-center" by accidentally grabbing the drive
+  // root as a path segment.
+  return basename(cwd.replace(/\\/g, "/")) || cwd;
+}
+
+function readGitOrigin(startDir) {
+  let dir = startDir.replace(/\\/g, "/");
+  // Walk up at most 20 levels — cheap insurance against an infinite loop
+  // if `dirname` ever fails to converge on a root.
+  for (let i = 0; i < 20; i++) {
+    const cfg = join(dir, ".git", "config");
+    if (existsSync(cfg)) {
+      try {
+        const url = parseGitOrigin(readFileSync(cfg, "utf8"));
+        if (url) return normalizeGitUrl(url);
+      } catch {
+        return null;
+      }
+      return null;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
+}
+
+function parseGitOrigin(config) {
+  // Tiny INI-ish parser scoped to [remote "origin"] → url. We don't pull
+  // in a full git-config parser — this covers >99% of real configs.
+  const lines = config.split(/\r?\n/);
+  let inOrigin = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.startsWith("[")) {
+      inOrigin = /^\[\s*remote\s+"origin"\s*\]$/i.test(line);
+      continue;
+    }
+    if (!inOrigin) continue;
+    const m = /^url\s*=\s*(.+?)\s*$/i.exec(line);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function normalizeGitUrl(url) {
+  // git@github.com:owner/repo(.git) → github.com/owner/repo
+  const ssh = /^[^@]+@([^:]+):(.+?)(\.git)?$/.exec(url);
+  if (ssh) return `${ssh[1]}/${ssh[2]}`;
+  // https://github.com/owner/repo(.git) → github.com/owner/repo
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname.replace(/\.git$/, "")}`;
+  } catch {
+    return url;
+  }
 }
 
 function loadState(path) {
